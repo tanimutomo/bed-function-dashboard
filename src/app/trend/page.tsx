@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { TrendAreaChart } from "@/components/charts/trend-area-chart";
 import { FunctionBarChart } from "@/components/charts/function-bar-chart";
-import { fetchNationalSummary, fetchPrefectureSummary, PREFECTURE_NAMES } from "@/lib/data";
+import { fetchNationalSummary, fetchPrefectureSummary, PREFECTURE_NAMES, PREFECTURE_LIST } from "@/lib/data";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { NationalSummary } from "@/types";
 
@@ -109,7 +109,7 @@ export default function TrendPage() {
           className="rounded-md border border-gray-300 px-3 py-2 text-sm"
         >
           <option value="all">全国</option>
-          {Object.entries(PREFECTURE_NAMES).map(([code, name]) => (
+          {PREFECTURE_LIST.map(([code, name]) => (
             <option key={code} value={code}>
               {name}
             </option>
