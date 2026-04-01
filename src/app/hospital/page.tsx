@@ -14,15 +14,17 @@ interface HospitalMaster {
   totalBeds: number;
   bedsByFunction: Record<FunctionType, number>;
   recoveryRelatedBeds: number;
+  psychiatricBeds: number;
 }
 
-type HospitalType = "acute" | "recovery" | "chronic" | "care_mix" | "unreported";
+type HospitalType = "acute" | "recovery" | "chronic" | "care_mix" | "psychiatric" | "unreported";
 
 const HOSPITAL_TYPE_LABELS: Record<HospitalType, string> = {
   acute: "急性期特化",
   recovery: "回復期関連特化",
   chronic: "慢性期特化",
   care_mix: "ケアミックス",
+  psychiatric: "精神科",
   unreported: "未報告",
 };
 
@@ -31,17 +33,27 @@ const HOSPITAL_TYPE_COLORS: Record<HospitalType, string> = {
   recovery: "bg-green-100 text-green-700",
   chronic: "bg-purple-100 text-purple-700",
   care_mix: "bg-blue-100 text-blue-700",
+  psychiatric: "bg-yellow-100 text-yellow-700",
   unreported: "bg-gray-100 text-gray-500",
 };
 
 function classifyHospital(h: HospitalMaster): HospitalType {
   const total = h.totalBeds;
   if (!total || total === 0) return "unreported";
+
+  // 精神科病院の判定: 精神病床が総病床の70%以上
+  const psychiatricBeds = h.psychiatricBeds || 0;
+  if (psychiatricBeds > 0 && psychiatricBeds / total >= 0.7) return "psychiatric";
+
   const bf = h.bedsByFunction;
   if (!bf) return "unreported";
 
   const funcTotal = bf.high_acute + bf.acute + bf.recovery + bf.chronic;
-  if (funcTotal === 0) return "unreported";
+  if (funcTotal === 0) {
+    // 病床機能報告なし（精神科単科等）
+    if (psychiatricBeds > 0) return "psychiatric";
+    return "unreported";
+  }
 
   // 急性期関連 = 高度急性期 + 急性期（地域包括医療病棟含む）
   const acuteBeds = bf.high_acute + bf.acute;

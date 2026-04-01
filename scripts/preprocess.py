@@ -7,10 +7,13 @@ Usage:
     python preprocess.py --year R5  # 特定年度のみ
 """
 
+import csv
 import json
 import os
+import re
 import sys
 import glob
+import unicodedata
 import warnings
 from collections import defaultdict
 
@@ -386,6 +389,88 @@ def process_year(year: str) -> dict:
     return dict(hospitals)
 
 
+def normalize_hospital_name(name: str) -> str:
+    """病院名を正規化してマッチング精度を向上"""
+    name = unicodedata.normalize("NFKC", name)
+    name = re.sub(r"\s+", "", name)
+    prefixes = [
+        "独立行政法人", "国立研究開発法人", "地方独立行政法人",
+        "社会医療法人", "医療法人社団", "医療法人財団", "医療法人",
+        "一般社団法人", "一般財団法人", "公益社団法人", "公益財団法人",
+        "社会福祉法人", "学校法人", "宗教法人", "特定医療法人",
+        "公立大学法人", "国立大学法人", "日本赤十字社", "株式会社", "有限会社",
+    ]
+    for p in prefixes:
+        if name.startswith(p):
+            name = name[len(p):]
+            break
+    return name
+
+
+def load_iryo_info() -> dict:
+    """医療情報ネットCSVを読み込み、(都道府県, 正規化病院名) → データのマップを返す"""
+    iryo_dir = os.path.join(RAW_DIR, "iryo_info")
+    csv_files = glob.glob(os.path.join(iryo_dir, "**", "*.csv"), recursive=True)
+    if not csv_files:
+        print("  No 医療情報ネット CSV found. Skipping psychiatric bed data.")
+        return {}, {}, []
+
+    # 最新のCSVを使用
+    csv_path = sorted(csv_files)[-1]
+    print(f"  Loading 医療情報ネット: {os.path.basename(csv_path)}")
+
+    exact_map = {}  # (pref, name) -> data
+    norm_map = {}   # (pref, normalized_name) -> data
+    psych_only = [] # 精神科単科病院（一般+療養=0）
+
+    with open(csv_path, encoding="utf-8-sig") as f:
+        reader = csv.reader(f)
+        next(reader)  # skip header
+        for row in reader:
+            if len(row) < 65:
+                continue
+            name = row[1].strip()
+            pref = row[7].strip().zfill(2)
+            general = int(row[57]) if row[57] else 0
+            therapy = int(row[58]) if row[58] else 0
+            psychiatric = int(row[61]) if row[61] else 0
+            tuberculosis = int(row[62]) if row[62] else 0
+            infectious = int(row[63]) if row[63] else 0
+            total = int(row[64]) if row[64] else 0
+
+            data = {
+                "name": name,
+                "pref": pref,
+                "generalBeds": general,
+                "therapyBeds": therapy,
+                "psychiatricBeds": psychiatric,
+                "tuberculosisBeds": tuberculosis,
+                "infectiousBeds": infectious,
+                "totalAllBeds": total,
+            }
+
+            exact_map[(pref, name)] = data
+            norm_map[(pref, normalize_hospital_name(name))] = data
+
+            # 精神科単科（一般+療養=0で精神>0）
+            if general + therapy == 0 and psychiatric > 0:
+                psych_only.append(data)
+
+    print(f"  医療情報ネット: {len(exact_map)} hospitals, {len(psych_only)} psychiatric-only")
+    return exact_map, norm_map, psych_only
+
+
+def match_iryo_info(name: str, pref: str, exact_map: dict, norm_map: dict):
+    """病院名+都道府県でマッチング"""
+    pref = pref.zfill(2)
+    if (pref, name) in exact_map:
+        return exact_map[(pref, name)]
+    norm = normalize_hospital_name(name)
+    if (pref, norm) in norm_map:
+        return norm_map[(pref, norm)]
+    return None
+
+
 def generate_outputs(all_years_data: dict):
     """全年度のデータからJSON出力を生成"""
     os.makedirs(os.path.join(OUTPUT_DIR, "summary"), exist_ok=True)
@@ -516,6 +601,10 @@ def generate_outputs(all_years_data: dict):
 
         write_json(os.path.join(OUTPUT_DIR, "areas", f"{area_code}.json"), output)
 
+    # 医療情報ネットデータの読み込み
+    print("\n=== Loading 医療情報ネット data ===")
+    iryo_exact, iryo_norm, psych_only_hospitals = load_iryo_info()
+
     # 病院個別データ出力 + 病院マスタ
     hospital_index_map = {}  # code -> index entry（最新年度で上書き）
     for year_key, hospitals in sorted(all_years_data.items()):
@@ -523,6 +612,10 @@ def generate_outputs(all_years_data: dict):
         for code, h in hospitals.items():
             if h["totalBeds"] <= 0:
                 continue
+
+            # 医療情報ネットから精神病床等を取得
+            iryo_match = match_iryo_info(h["name"], h["prefCode"], iryo_exact, iryo_norm)
+            psychiatric_beds = iryo_match["psychiatricBeds"] if iryo_match else 0
 
             # 病院マスタに追加（最新年度の情報で上書き）
             hospital_index_map[code] = {
@@ -534,6 +627,7 @@ def generate_outputs(all_years_data: dict):
                 "totalBeds": h["totalBeds"],
                 "bedsByFunction": dict(h["bedsByFunction"]),
                 "recoveryRelatedBeds": h["recoveryRelatedBeds"],
+                "psychiatricBeds": psychiatric_beds,
             }
 
             # 病院個別JSON（年度ごとにマージ）
@@ -573,6 +667,27 @@ def generate_outputs(all_years_data: dict):
             }
 
             write_json(hosp_file, hosp_data)
+
+    # 精神科単科病院を追加（病床機能報告に含まれないもの）
+    existing_names = {(v["prefecture"].zfill(2), v["name"]) for v in hospital_index_map.values()}
+    psych_added = 0
+    for ph in psych_only_hospitals:
+        if (ph["pref"], ph["name"]) not in existing_names:
+            pseudo_code = f"P{ph['pref']}{psych_added:04d}"
+            hospital_index_map[pseudo_code] = {
+                "code": pseudo_code,
+                "name": ph["name"],
+                "areaCode": "",
+                "areaName": "",
+                "prefecture": ph["pref"],
+                "totalBeds": ph["psychiatricBeds"],
+                "bedsByFunction": {"high_acute": 0, "acute": 0, "recovery": 0, "chronic": 0},
+                "recoveryRelatedBeds": 0,
+                "psychiatricBeds": ph["psychiatricBeds"],
+            }
+            existing_names.add((ph["pref"], ph["name"]))
+            psych_added += 1
+    print(f"  Added {psych_added} psychiatric-only hospitals")
 
     # 病院マスタ出力（名前順ソート）
     hospital_index = sorted(hospital_index_map.values(), key=lambda x: x["name"])
