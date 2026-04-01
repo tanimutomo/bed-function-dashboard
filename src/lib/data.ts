@@ -56,6 +56,11 @@ export async function fetchRanking(year: string) {
   return res.json();
 }
 
+export async function fetch630Summary() {
+  const res = await fetch(`${BASE_PATH}/psychiatric/630_summary.json`);
+  return res.json();
+}
+
 /** 都道府県コード→名称（ソート済み配列） */
 export const PREFECTURE_LIST: [string, string][] = [
   ["01", "北海道"], ["02", "青森県"], ["03", "岩手県"], ["04", "宮城県"], ["05", "秋田県"],

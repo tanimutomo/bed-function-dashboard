@@ -9,6 +9,7 @@ const navItems = [
   { href: "/ranking", label: "ランキング" },
   { href: "/trend", label: "経年トレンド" },
   { href: "/hospital", label: "病院カルテ" },
+  { href: "/psychiatric", label: "精神科", accent: true },
 ];
 
 export function Navigation() {
@@ -27,14 +28,19 @@ export function Navigation() {
                 item.href === "/"
                   ? pathname === "/"
                   : pathname.startsWith(item.href);
+              const accent = "accent" in item && item.accent;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                     isActive
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                      ? accent
+                        ? "bg-amber-50 text-amber-700"
+                        : "bg-blue-50 text-blue-700"
+                      : accent
+                        ? "text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                   }`}
                 >
                   {item.label}
