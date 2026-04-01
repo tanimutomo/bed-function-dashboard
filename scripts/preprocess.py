@@ -288,6 +288,7 @@ def process_year(year: str) -> dict:
         "totalBeds": 0,
         "bedsByFunction": {"high_acute": 0, "acute": 0, "recovery": 0, "chronic": 0},
         "futureBedsByFunction": {"high_acute": 0, "acute": 0, "recovery": 0, "chronic": 0},
+        "recoveryRelatedBeds": 0,  # 回復期 + 地域包括ケア病棟の病床数
         "nurses": 0,
         "newAdmissions": 0,
         "plannedAdmissions": 0,
@@ -355,13 +356,27 @@ def process_year(year: str) -> dict:
             h["dialysis"] += perf["dialysis"]
             h["rehab"] += perf["rehab"]
 
+        # 算定入院料
+        admission_fee = safe_str(row.iloc[y1_cols["admission_fee"]])
+
+        # 回復期関連病床数の計算
+        # 回復期として報告された病床 + 地域包括ケア病棟の病床を合算
+        # 地域包括医療病棟は急性期側として扱うため含めない
+        is_recovery_related = (
+            current_func == "recovery"
+            or "地域包括ケア病棟" in admission_fee
+            or "地域包括ケア入院医療管理料" in admission_fee
+        )
+        if is_recovery_related:
+            h["recoveryRelatedBeds"] += ward_beds
+
         # 病棟情報
         h["wards"].append({
             "wardName": safe_str(row.iloc[y1_cols["ward_name"]]),
             "functionType": current_func or "unknown",
             "futureFunctionType": future_func or "unknown",
             "beds": ward_beds,
-            "admissionFee": safe_str(row.iloc[y1_cols["admission_fee"]]),
+            "admissionFee": admission_fee,
         })
 
     # 救急車搬送件数を施設票から追加
@@ -518,6 +533,7 @@ def generate_outputs(all_years_data: dict):
                 "prefecture": h["prefCode"],
                 "totalBeds": h["totalBeds"],
                 "bedsByFunction": dict(h["bedsByFunction"]),
+                "recoveryRelatedBeds": h["recoveryRelatedBeds"],
             }
 
             # 病院個別JSON（年度ごとにマージ）

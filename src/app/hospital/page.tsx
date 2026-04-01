@@ -13,13 +13,14 @@ interface HospitalMaster {
   prefecture: string;
   totalBeds: number;
   bedsByFunction: Record<FunctionType, number>;
+  recoveryRelatedBeds: number;
 }
 
 type HospitalType = "acute" | "recovery" | "chronic" | "care_mix" | "unreported";
 
 const HOSPITAL_TYPE_LABELS: Record<HospitalType, string> = {
   acute: "急性期特化",
-  recovery: "回復期特化",
+  recovery: "回復期関連特化",
   chronic: "慢性期特化",
   care_mix: "ケアミックス",
   unreported: "未報告",
@@ -42,13 +43,20 @@ function classifyHospital(h: HospitalMaster): HospitalType {
   const funcTotal = bf.high_acute + bf.acute + bf.recovery + bf.chronic;
   if (funcTotal === 0) return "unreported";
 
-  const acuteRate = (bf.high_acute + bf.acute) / funcTotal;
-  const recoveryRate = bf.recovery / funcTotal;
+  // 急性期関連 = 高度急性期 + 急性期（地域包括医療病棟含む）
+  const acuteBeds = bf.high_acute + bf.acute;
+  // 回復期関連 = 回復期 + 地域包括ケア病棟（recoveryRelatedBedsで算出済み）
+  const recoveryRelatedBeds = h.recoveryRelatedBeds || bf.recovery;
+
+  const acuteRate = acuteBeds / funcTotal;
+  const recoveryRelatedRate = recoveryRelatedBeds / funcTotal;
   const chronicRate = bf.chronic / funcTotal;
 
   if (acuteRate >= 0.7) return "acute";
-  if (recoveryRate >= 0.5) return "recovery";
+  if (recoveryRelatedRate >= 0.7) return "recovery";
   if (chronicRate >= 0.7) return "chronic";
+  // ケアミックス: 急性期 + 回復期関連が80%以上
+  if ((acuteBeds + recoveryRelatedBeds) / funcTotal >= 0.8) return "care_mix";
   return "care_mix";
 }
 
