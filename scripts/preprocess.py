@@ -502,7 +502,7 @@ def generate_outputs(all_years_data: dict):
         write_json(os.path.join(OUTPUT_DIR, "areas", f"{area_code}.json"), output)
 
     # 病院個別データ出力 + 病院マスタ
-    seen_hospitals = set()
+    hospital_index_map = {}  # code -> index entry（最新年度で上書き）
     for year_key, hospitals in sorted(all_years_data.items()):
         fiscal_year = YEAR_MAP[year_key]
         for code, h in hospitals.items():
@@ -510,15 +510,15 @@ def generate_outputs(all_years_data: dict):
                 continue
 
             # 病院マスタに追加（最新年度の情報で上書き）
-            if code not in seen_hospitals:
-                hospital_index.append({
-                    "code": code,
-                    "name": h["name"],
-                    "areaCode": h["areaCode"],
-                    "areaName": h["areaName"],
-                    "prefecture": h["prefCode"],
-                })
-                seen_hospitals.add(code)
+            hospital_index_map[code] = {
+                "code": code,
+                "name": h["name"],
+                "areaCode": h["areaCode"],
+                "areaName": h["areaName"],
+                "prefecture": h["prefCode"],
+                "totalBeds": h["totalBeds"],
+                "bedsByFunction": dict(h["bedsByFunction"]),
+            }
 
             # 病院個別JSON（年度ごとにマージ）
             hosp_file = os.path.join(OUTPUT_DIR, "hospitals", f"{code}.json")
@@ -559,7 +559,7 @@ def generate_outputs(all_years_data: dict):
             write_json(hosp_file, hosp_data)
 
     # 病院マスタ出力（名前順ソート）
-    hospital_index.sort(key=lambda x: x["name"])
+    hospital_index = sorted(hospital_index_map.values(), key=lambda x: x["name"])
     write_json(os.path.join(OUTPUT_DIR, "hospitals", "index.json"), hospital_index)
 
     # 都道府県別集計
