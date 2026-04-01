@@ -11,12 +11,19 @@ export async function fetchPrefectureSummary(): Promise<
   Record<string, NationalSummary[]>
 > {
   const res = await fetch(`${BASE_PATH}/summary/prefectures.json`);
-  return res.json();
+  const data: Record<string, NationalSummary[]> = await res.json();
+  // キーをゼロパディングして統一（データ側が "3" → "03" に変換）
+  const normalized: Record<string, NationalSummary[]> = {};
+  for (const [key, value] of Object.entries(data)) {
+    normalized[key.padStart(2, "0")] = value;
+  }
+  return normalized;
 }
 
 export async function fetchAreaIndex(): Promise<Area[]> {
   const res = await fetch(`${BASE_PATH}/areas/index.json`);
-  return res.json();
+  const data: Area[] = await res.json();
+  return data.map((a) => ({ ...a, prefecture: a.prefecture.padStart(2, "0") }));
 }
 
 export async function fetchAreaDetail(areaCode: string) {
@@ -28,12 +35,20 @@ export async function fetchHospitalIndex(): Promise<
   { code: string; name: string; areaCode: string; areaName: string; prefecture: string }[]
 > {
   const res = await fetch(`${BASE_PATH}/hospitals/index.json`);
-  return res.json();
+  const data = await res.json();
+  return data.map((h: { prefecture: string; [key: string]: unknown }) => ({
+    ...h,
+    prefecture: h.prefecture.padStart(2, "0"),
+  }));
 }
 
 export async function fetchHospitalDetail(code: string) {
   const res = await fetch(`${BASE_PATH}/hospitals/${code}.json`);
-  return res.json();
+  const data = await res.json();
+  if (data.prefecture) {
+    data.prefecture = String(data.prefecture).padStart(2, "0");
+  }
+  return data;
 }
 
 export async function fetchRanking(year: string) {
