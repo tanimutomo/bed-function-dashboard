@@ -10,8 +10,13 @@ import {
   Legend,
   ResponsiveContainer,
   Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
 } from "recharts";
-import { fetchHospitalIndex, fetchHospitalDetail, PREFECTURE_NAMES } from "@/lib/data";
+import { fetchHospitalIndex, fetchHospitalDetail, fetchAreaDetail, PREFECTURE_NAMES } from "@/lib/data";
 import { FUNCTION_LABELS, FUNCTION_COLORS } from "@/types";
 import type { FunctionType } from "@/types";
 
@@ -23,34 +28,55 @@ interface HospitalMaster {
   prefecture: string;
 }
 
+interface HospitalYearData {
+  totalBeds: number;
+  bedsByFunction: Record<FunctionType, number>;
+  futureBedsByFunction: Record<FunctionType, number>;
+  nurses: number;
+  newAdmissions: number;
+  surgeries: number;
+  surgeriesGA: number;
+  emergencyTransports: number;
+  chemotherapy: number;
+  radiotherapy: number;
+  tpa: number;
+  dialysis: number;
+  rehab: number;
+  wards: {
+    wardName: string;
+    functionType: string;
+    futureFunctionType: string;
+    beds: number;
+    admissionFee: string;
+  }[];
+}
+
 interface HospitalDetailData {
   code: string;
   name: string;
   areaCode: string;
   areaName: string;
   prefecture: string;
+  yearlyData: Record<string, HospitalYearData>;
+}
+
+interface AreaDetailData {
+  code: string;
+  name: string;
+  prefecture: string;
   yearlyData: Record<
     string,
     {
       totalBeds: number;
       bedsByFunction: Record<FunctionType, number>;
-      futureBedsByFunction: Record<FunctionType, number>;
-      nurses: number;
-      newAdmissions: number;
-      surgeries: number;
-      surgeriesGA: number;
-      emergencyTransports: number;
-      chemotherapy: number;
-      radiotherapy: number;
-      tpa: number;
-      dialysis: number;
-      rehab: number;
-      wards: {
-        wardName: string;
-        functionType: string;
-        futureFunctionType: string;
-        beds: number;
-        admissionFee: string;
+      hospitals: {
+        code: string;
+        name: string;
+        totalBeds: number;
+        bedsByFunction: Record<FunctionType, number>;
+        emergencyTransports: number;
+        surgeriesGA: number;
+        chemotherapy: number;
       }[];
     }
   >;
@@ -61,6 +87,7 @@ export default function HospitalPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCode, setSelectedCode] = useState<string>("");
   const [detail, setDetail] = useState<HospitalDetailData | null>(null);
+  const [areaDetail, setAreaDetail] = useState<AreaDetailData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -72,9 +99,15 @@ export default function HospitalPage() {
 
   useEffect(() => {
     if (selectedCode) {
-      fetchHospitalDetail(selectedCode).then(setDetail);
+      const master = hospitals.find((h) => h.code === selectedCode);
+      fetchHospitalDetail(selectedCode).then((d) => {
+        setDetail(d);
+        if (master) {
+          fetchAreaDetail(master.areaCode).then(setAreaDetail);
+        }
+      });
     }
-  }, [selectedCode]);
+  }, [selectedCode, hospitals]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery || searchQuery.length < 2) return [];
@@ -89,37 +122,79 @@ export default function HospitalPage() {
       .slice(0, 20);
   }, [searchQuery, hospitals]);
 
-  const latestYear = detail
-    ? Object.keys(detail.yearlyData).sort().pop()
-    : null;
+  // 臨床データがある最新年度を使用
+  const sortedYears = detail
+    ? Object.keys(detail.yearlyData).sort()
+    : [];
+  const latestYear = sortedYears.length > 0 ? sortedYears[sortedYears.length - 1] : null;
   const latestData = latestYear ? detail?.yearlyData[latestYear] : null;
 
-  // レーダーチャートデータ
+  // 臨床データ（手術・看護師等）が揃っている最新年度を優先
+  const clinicalYear = sortedYears
+    .slice()
+    .reverse()
+    .find((y) => {
+      const d = detail?.yearlyData[y];
+      if (!d) return false;
+      // 複数指標が揃っている年度を優先（救急搬送だけでは不十分）
+      const filledCount = [d.surgeriesGA, d.nurses, d.chemotherapy].filter((v) => v > 0).length;
+      return filledCount >= 1;
+    });
+  const clinicalData = clinicalYear ? detail?.yearlyData[clinicalYear] : latestData;
+
+  // 区域平均の計算
+  const areaAvg = useMemo(() => {
+    if (!areaDetail || !clinicalYear) return null;
+    const ayd = areaDetail.yearlyData[clinicalYear];
+    if (!ayd || ayd.hospitals.length === 0) return null;
+    const count = ayd.hospitals.length;
+    const avgBeds = ayd.totalBeds / count;
+    const avgEmergency =
+      ayd.hospitals.reduce((s, h) => s + h.emergencyTransports, 0) / count;
+    const avgSurgeries =
+      ayd.hospitals.reduce((s, h) => s + h.surgeriesGA, 0) / count;
+    const avgChemo =
+      ayd.hospitals.reduce((s, h) => s + h.chemotherapy, 0) / count;
+    return { avgBeds, avgEmergency, avgSurgeries, avgChemo };
+  }, [areaDetail, clinicalYear]);
+
+  // レーダーチャートデータ（区域平均との比較）
   const radarData = useMemo(() => {
-    if (!latestData || latestData.totalBeds === 0) return [];
-    return [
-      {
-        metric: "病床数",
-        value: latestData.totalBeds,
-      },
-      {
-        metric: "救急搬送",
-        value: latestData.emergencyTransports,
-      },
-      {
-        metric: "手術件数",
-        value: latestData.surgeriesGA,
-      },
-      {
-        metric: "化学療法",
-        value: latestData.chemotherapy,
-      },
-      {
-        metric: "看護師数",
-        value: latestData.nurses,
-      },
+    if (!clinicalData || clinicalData.totalBeds === 0) return [];
+    const metrics = [
+      { metric: "病床数", hospital: clinicalData.totalBeds, area: areaAvg?.avgBeds || 0 },
+      { metric: "救急搬送", hospital: clinicalData.emergencyTransports, area: areaAvg?.avgEmergency || 0 },
+      { metric: "手術件数", hospital: clinicalData.surgeriesGA, area: areaAvg?.avgSurgeries || 0 },
+      { metric: "化学療法", hospital: clinicalData.chemotherapy, area: areaAvg?.avgChemo || 0 },
+      { metric: "看護師数", hospital: clinicalData.nurses, area: 0 },
     ];
-  }, [latestData]);
+    // 正規化（最大値を100とする）
+    const maxValues = metrics.map((m) => Math.max(m.hospital, m.area, 1));
+    return metrics.map((m, i) => ({
+      metric: m.metric,
+      hospital: Math.round((m.hospital / maxValues[i]) * 100),
+      area: Math.round((m.area / maxValues[i]) * 100),
+      hospitalRaw: m.hospital,
+      areaRaw: Math.round(m.area),
+    }));
+  }, [clinicalData, areaAvg]);
+
+  // 年度推移データ
+  const yearlyTrendData = useMemo(() => {
+    if (!detail) return [];
+    return sortedYears
+      .filter((y) => {
+        const d = detail.yearlyData[y];
+        return d && d.totalBeds > 0 && Object.values(d.bedsByFunction).some((v) => v > 0);
+      })
+      .map((y) => {
+        const d = detail.yearlyData[y];
+        return {
+          year: y,
+          ...d.bedsByFunction,
+        };
+      });
+  }, [detail, sortedYears]);
 
   if (loading) {
     return (
@@ -145,6 +220,7 @@ export default function HospitalPage() {
             setSearchQuery(e.target.value);
             setSelectedCode("");
             setDetail(null);
+            setAreaDetail(null);
           }}
           placeholder="病院名、都道府県名、構想区域名で検索..."
           className="w-full rounded-md border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -194,51 +270,75 @@ export default function HospitalPage() {
               <div>
                 <p className="text-xs text-gray-500">救急搬送</p>
                 <p className="text-lg font-bold">
-                  {latestData.emergencyTransports.toLocaleString()}件
+                  {(clinicalData?.emergencyTransports || 0).toLocaleString()}件
                 </p>
               </div>
               <div>
                 <p className="text-xs text-gray-500">全身麻酔手術</p>
                 <p className="text-lg font-bold">
-                  {latestData.surgeriesGA.toLocaleString()}件
+                  {(clinicalData?.surgeriesGA || 0).toLocaleString()}件
                 </p>
               </div>
               <div>
                 <p className="text-xs text-gray-500">化学療法</p>
                 <p className="text-lg font-bold">
-                  {latestData.chemotherapy.toLocaleString()}件
+                  {(clinicalData?.chemotherapy || 0).toLocaleString()}件
                 </p>
               </div>
               <div>
                 <p className="text-xs text-gray-500">看護師数</p>
                 <p className="text-lg font-bold">
-                  {latestData.nurses.toLocaleString()}人
+                  {(clinicalData?.nurses || 0).toLocaleString()}人
                 </p>
               </div>
             </div>
+            {clinicalYear && clinicalYear !== latestYear && (
+              <p className="mt-2 text-xs text-gray-400">
+                診療実績は{clinicalYear}年度のデータを表示
+              </p>
+            )}
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
             {/* レーダーチャート */}
             <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-4 text-lg font-semibold">診療実績サマリー</h3>
+              <h3 className="mb-4 text-lg font-semibold">
+                診療実績サマリー
+                {areaAvg && (
+                  <span className="ml-2 text-sm font-normal text-gray-400">
+                    vs 区域平均
+                  </span>
+                )}
+              </h3>
               <ResponsiveContainer width="100%" height={300}>
                 <RadarChart data={radarData}>
                   <PolarGrid />
                   <PolarAngleAxis dataKey="metric" tick={{ fontSize: 12 }} />
-                  <PolarRadiusAxis tick={false} axisLine={false} />
+                  <PolarRadiusAxis tick={false} axisLine={false} domain={[0, 100]} />
                   <Radar
                     name={detail.name}
-                    dataKey="value"
+                    dataKey="hospital"
                     stroke="#3b82f6"
                     fill="#3b82f6"
                     fillOpacity={0.3}
                   />
+                  {areaAvg && (
+                    <Radar
+                      name="区域平均"
+                      dataKey="area"
+                      stroke="#f97316"
+                      fill="#f97316"
+                      fillOpacity={0.1}
+                    />
+                  )}
+                  <Legend />
                   <Tooltip
-                    formatter={(value: number) => [
-                      value.toLocaleString(),
-                      "",
-                    ]}
+                    formatter={(value: number, name: string, props: { payload?: { hospitalRaw?: number; areaRaw?: number; metric?: string } }) => {
+                      const raw = name === detail.name
+                        ? props.payload?.hospitalRaw
+                        : props.payload?.areaRaw;
+                      return [raw?.toLocaleString() || value, name];
+                    }}
                   />
                 </RadarChart>
               </ResponsiveContainer>
@@ -276,7 +376,7 @@ export default function HospitalPage() {
                           }}
                         />
                       </div>
-                      {future !== current && (
+                      {future !== current && future > 0 && (
                         <p className="mt-0.5 text-xs text-gray-400">
                           6年後予定: {future.toLocaleString()}床
                         </p>
@@ -287,6 +387,41 @@ export default function HospitalPage() {
               </div>
             </div>
           </div>
+
+          {/* 年度別病床推移 */}
+          {yearlyTrendData.length > 1 && (
+            <div className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+              <h3 className="mb-4 text-lg font-semibold">機能別病床数の推移</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={yearlyTrendData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="year" tickFormatter={(v: string) => `${v}年度`} />
+                  <YAxis />
+                  <Tooltip
+                    labelFormatter={(label: string) => `${label}年度`}
+                    formatter={(value: number, name: string) => [
+                      `${value.toLocaleString()}床`,
+                      FUNCTION_LABELS[name as FunctionType] || name,
+                    ]}
+                  />
+                  <Legend
+                    formatter={(value: string) =>
+                      FUNCTION_LABELS[value as FunctionType] || value
+                    }
+                  />
+                  {(Object.keys(FUNCTION_COLORS) as FunctionType[]).map((key) => (
+                    <Bar
+                      key={key}
+                      dataKey={key}
+                      stackId="a"
+                      fill={FUNCTION_COLORS[key]}
+                      name={key}
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           {/* 病棟別テーブル */}
           <div className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">

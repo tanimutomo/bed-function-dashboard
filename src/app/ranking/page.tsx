@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -10,22 +10,35 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { fetchRanking, PREFECTURE_NAMES } from "@/lib/data";
+import { fetchRanking, fetchAreaIndex, PREFECTURE_NAMES } from "@/lib/data";
 import { RANKING_METRIC_LABELS } from "@/types";
-import type { RankingMetric, RankingEntry } from "@/types";
+import type { RankingMetric, RankingEntry, Area } from "@/types";
 
 export default function RankingPage() {
   const [rankingData, setRankingData] = useState<Record<string, RankingEntry[]>>({});
   const [selectedMetric, setSelectedMetric] = useState<RankingMetric>("surgeriesGA");
+  const [selectedPref, setSelectedPref] = useState<string>("all");
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [selectedArea, setSelectedArea] = useState<string>("all");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 最新年度のランキングを取得
-    fetchRanking("2023").then((data) => {
-      setRankingData(data);
-      setLoading(false);
-    });
+    Promise.all([fetchRanking("2023"), fetchAreaIndex()]).then(
+      ([ranking, areaList]) => {
+        setRankingData(ranking);
+        setAreas(areaList);
+        setLoading(false);
+      }
+    );
   }, []);
+
+  const filteredAreas = useMemo(
+    () =>
+      selectedPref === "all"
+        ? areas
+        : areas.filter((a) => a.prefecture === selectedPref),
+    [areas, selectedPref]
+  );
 
   if (loading) {
     return (
@@ -35,7 +48,15 @@ export default function RankingPage() {
     );
   }
 
-  const entries: RankingEntry[] = (rankingData[selectedMetric] || []).slice(0, 20);
+  // フィルタ適用
+  let entries: RankingEntry[] = (rankingData[selectedMetric] || []);
+  if (selectedPref !== "all") {
+    entries = entries.filter((e) => e.prefecture === selectedPref);
+  }
+  if (selectedArea !== "all") {
+    entries = entries.filter((e) => e.areaCode === selectedArea);
+  }
+  entries = entries.slice(0, 20);
 
   const chartData = entries.map((e) => ({
     name:
@@ -56,7 +77,7 @@ export default function RankingPage() {
       </p>
 
       {/* 指標選択 */}
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         {(Object.keys(RANKING_METRIC_LABELS) as RankingMetric[]).map(
           (metric) => (
             <button
@@ -74,46 +95,90 @@ export default function RankingPage() {
         )}
       </div>
 
+      {/* 地域フィルタ */}
+      <div className="mb-6 flex flex-wrap gap-4">
+        <select
+          value={selectedPref}
+          onChange={(e) => {
+            setSelectedPref(e.target.value);
+            setSelectedArea("all");
+          }}
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+        >
+          <option value="all">全国</option>
+          {Object.entries(PREFECTURE_NAMES).map(([code, name]) => (
+            <option key={code} value={code}>
+              {name}
+            </option>
+          ))}
+        </select>
+
+        {selectedPref !== "all" && (
+          <select
+            value={selectedArea}
+            onChange={(e) => setSelectedArea(e.target.value)}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value="all">全構想区域</option>
+            {filteredAreas.map((a) => (
+              <option key={a.code} value={a.code}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
       {/* 棒グラフ */}
       <div className="mb-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold">
-          {RANKING_METRIC_LABELS[selectedMetric]} 上位20病院
+          {RANKING_METRIC_LABELS[selectedMetric]}{" "}
+          {selectedPref !== "all"
+            ? `${PREFECTURE_NAMES[selectedPref]}${selectedArea !== "all" ? ` / ${filteredAreas.find((a) => a.code === selectedArea)?.name || ""}` : ""}`
+            : "全国"}{" "}
+          上位{entries.length}病院
         </h2>
-        <ResponsiveContainer width="100%" height={Math.max(400, chartData.length * 30)}>
-          <BarChart
-            data={chartData}
-            layout="vertical"
-            margin={{ top: 5, right: 30, left: 120, bottom: 5 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" />
-            <YAxis
-              dataKey="name"
-              type="category"
-              width={120}
-              tick={{ fontSize: 11 }}
-            />
-            <Tooltip
-              content={({ payload }) => {
-                if (!payload || payload.length === 0) return null;
-                const data = payload[0]?.payload;
-                if (!data) return null;
-                return (
-                  <div className="rounded border border-gray-200 bg-white p-3 text-sm shadow">
-                    <p className="font-bold">{data.fullName}</p>
-                    <p className="text-gray-500">
-                      {data.pref} / {data.area}
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {data.value.toLocaleString()}件
-                    </p>
-                  </div>
-                );
-              }}
-            />
-            <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        {chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={Math.max(400, chartData.length * 30)}>
+            <BarChart
+              data={chartData}
+              layout="vertical"
+              margin={{ top: 5, right: 30, left: 120, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" />
+              <YAxis
+                dataKey="name"
+                type="category"
+                width={120}
+                tick={{ fontSize: 11 }}
+              />
+              <Tooltip
+                content={({ payload }) => {
+                  if (!payload || payload.length === 0) return null;
+                  const data = payload[0]?.payload;
+                  if (!data) return null;
+                  return (
+                    <div className="rounded border border-gray-200 bg-white p-3 text-sm shadow">
+                      <p className="font-bold">{data.fullName}</p>
+                      <p className="text-gray-500">
+                        {data.pref} / {data.area}
+                      </p>
+                      <p className="mt-1 font-medium">
+                        {data.value.toLocaleString()}件
+                      </p>
+                    </div>
+                  );
+                }}
+              />
+              <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="py-20 text-center text-gray-400">
+            該当するデータがありません
+          </p>
+        )}
       </div>
 
       {/* テーブル */}
@@ -133,12 +198,12 @@ export default function RankingPage() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => (
+              {entries.map((entry, i) => (
                 <tr
                   key={entry.hospitalCode}
                   className="border-b border-gray-100 hover:bg-gray-50"
                 >
-                  <td className="py-2 pr-4 font-medium">{entry.rank}</td>
+                  <td className="py-2 pr-4 font-medium">{i + 1}</td>
                   <td className="py-2 pr-4">{entry.hospitalName}</td>
                   <td className="py-2 pr-4">
                     {PREFECTURE_NAMES[entry.prefecture] || entry.prefecture}
