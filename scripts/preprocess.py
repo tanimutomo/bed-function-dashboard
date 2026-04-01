@@ -685,6 +685,37 @@ def generate_outputs(all_years_data: dict):
                 "recoveryRelatedBeds": 0,
                 "psychiatricBeds": ph["psychiatricBeds"],
             }
+            # 個別JSONも生成
+            hosp_file = os.path.join(OUTPUT_DIR, "hospitals", f"{pseudo_code}.json")
+            write_json(hosp_file, {
+                "code": pseudo_code,
+                "name": ph["name"],
+                "areaCode": "",
+                "areaName": "",
+                "prefecture": ph["pref"],
+                "yearlyData": {
+                    "2024": {
+                        "totalBeds": ph["psychiatricBeds"],
+                        "bedsByFunction": {"high_acute": 0, "acute": 0, "recovery": 0, "chronic": 0},
+                        "futureBedsByFunction": {"high_acute": 0, "acute": 0, "recovery": 0, "chronic": 0},
+                        "psychiatricBeds": ph["psychiatricBeds"],
+                        "nurses": 0,
+                        "newAdmissions": 0,
+                        "plannedAdmissions": 0,
+                        "surgeries": 0,
+                        "surgeriesGA": 0,
+                        "heartLungSurgery": 0,
+                        "cancerSurgery": 0,
+                        "radiotherapy": 0,
+                        "chemotherapy": 0,
+                        "tpa": 0,
+                        "dialysis": 0,
+                        "rehab": 0,
+                        "emergencyTransports": 0,
+                        "wards": [],
+                    },
+                },
+            })
             existing_names.add((ph["pref"], ph["name"]))
             psych_added += 1
     print(f"  Added {psych_added} psychiatric-only hospitals")

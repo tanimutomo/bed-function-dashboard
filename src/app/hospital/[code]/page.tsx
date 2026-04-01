@@ -85,13 +85,17 @@ export default function HospitalDetailPage() {
 
   useEffect(() => {
     if (!code) return;
-    fetchHospitalDetail(code).then((d) => {
-      setDetail(d);
-      if (d.areaCode) {
-        fetchAreaDetail(d.areaCode).then(setAreaDetail);
-      }
-      setLoading(false);
-    });
+    fetchHospitalDetail(code)
+      .then((d) => {
+        setDetail(d);
+        if (d.areaCode) {
+          fetchAreaDetail(d.areaCode).then(setAreaDetail);
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+      });
   }, [code]);
 
   // 臨床データがある最新年度を使用
