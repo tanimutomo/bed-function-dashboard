@@ -1,0 +1,49 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const navItems = [
+  { href: "/", label: "全国俯瞰" },
+  { href: "/area", label: "構想区域" },
+  { href: "/ranking", label: "ランキング" },
+  { href: "/trend", label: "経年トレンド" },
+  { href: "/hospital", label: "病院カルテ" },
+];
+
+export function Navigation() {
+  const pathname = usePathname();
+
+  return (
+    <header className="border-b border-gray-200 bg-white">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex h-14 items-center justify-between">
+          <Link href="/" className="text-lg font-bold text-gray-900">
+            病床機能報告ダッシュボード
+          </Link>
+          <nav className="flex gap-1">
+            {navItems.map((item) => {
+              const isActive =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+      </div>
+    </header>
+  );
+}
