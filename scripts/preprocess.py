@@ -35,7 +35,7 @@ FUNCTION_MAP = {
 # ヘッダー行数（データは row 6 から開始）
 HEADER_ROWS = 6
 
-# 様式1のカラムインデックス（R3-R6共通）
+# 様式1のカラムインデックス（R3-R5）
 Y1_COLS = {
     "hospital_code": 0,
     "hospital_name": 1,
@@ -60,7 +60,32 @@ Y1_COLS = {
     "planned_admissions_annual": 78,
 }
 
-# 様式2年間合計のカラムインデックス
+# R6ではカラム構成が変更（介護療養病床関連列が削除されて左に6列シフト）
+Y1_COLS_R6 = {
+    "hospital_code": 0,
+    "hospital_name": 1,
+    "pref_code": 2,
+    "area_code": 5,
+    "area_name": 6,
+    "ward_code": 11,
+    "ward_name": 12,
+    "current_function": 15,
+    "future_function": 16,
+    "general_beds_permitted": 18,
+    "general_beds_max": 19,
+    "therapy_beds_permitted": 22,
+    "therapy_beds_max": 23,
+    "admission_fee": 26,
+    "admission_fee_beds": 27,
+    # 職員数（常勤）
+    "nurses": 32,       # 看護師（常勤）
+    "asst_nurses": 34,  # 准看護師（常勤）
+    # 入院患者数
+    "new_admissions_annual": 58,
+    "planned_admissions_annual": 71,
+}
+
+# 様式2年間合計のカラムインデックス（R3-R5）
 Y2_COLS = {
     "hospital_code": 0,
     "hospital_name": 1,
@@ -84,6 +109,27 @@ Y2_COLS = {
     "rehab": 179,             # 疾患別リハビリテーション料
     # 全身管理
     "dialysis": 177,          # 人工腎臓・腹膜灌流
+}
+
+# R6ではカラムが1列左にシフト
+Y2_COLS_R6 = {
+    "hospital_code": 0,
+    "hospital_name": 1,
+    "pref_code": 2,
+    "area_code": 5,
+    "area_name": 6,
+    "ward_code": 11,
+    "ward_name": 12,
+    "surgeries_total": 81,
+    "surgeries_ga": 94,
+    "heart_lung_surgery": 107,
+    "cancer_surgery": 111,
+    "radiotherapy": 114,
+    "chemotherapy": 115,
+    "tpa": 120,
+    "triage": 144,
+    "rehab": 184,
+    "dialysis": 182,
 }
 
 # 施設票のカラムインデックス
@@ -208,24 +254,28 @@ def process_year(year: str) -> dict:
 
     # --- 様式2（年間合計）から診療実績をインデックス ---
     # 病棟コードの11桁目が様式番号で異なるため、ward_key()で正規化してマッチング
+    y2_cols = Y2_COLS_R6 if year == "R6" else Y2_COLS
     perf_by_ward = {}
     if not df_y2.empty:
         for _, row in df_y2.iterrows():
-            raw_ward_code = safe_str(row.iloc[Y2_COLS["ward_code"]])
+            raw_ward_code = safe_str(row.iloc[y2_cols["ward_code"]])
             if not raw_ward_code:
                 continue
             wk = ward_key(raw_ward_code)
             perf_by_ward[wk] = {
-                "surgeries": safe_int(row.iloc[Y2_COLS["surgeries_total"]]),
-                "surgeriesGA": safe_int(row.iloc[Y2_COLS["surgeries_ga"]]),
-                "heartLungSurgery": safe_int(row.iloc[Y2_COLS["heart_lung_surgery"]]),
-                "cancerSurgery": safe_int(row.iloc[Y2_COLS["cancer_surgery"]]),
-                "radiotherapy": safe_int(row.iloc[Y2_COLS["radiotherapy"]]),
-                "chemotherapy": safe_int(row.iloc[Y2_COLS["chemotherapy"]]),
-                "tpa": safe_int(row.iloc[Y2_COLS["tpa"]]),
-                "dialysis": safe_int(row.iloc[Y2_COLS["dialysis"]]),
-                "rehab": safe_int(row.iloc[Y2_COLS["rehab"]]),
+                "surgeries": safe_int(row.iloc[y2_cols["surgeries_total"]]),
+                "surgeriesGA": safe_int(row.iloc[y2_cols["surgeries_ga"]]),
+                "heartLungSurgery": safe_int(row.iloc[y2_cols["heart_lung_surgery"]]),
+                "cancerSurgery": safe_int(row.iloc[y2_cols["cancer_surgery"]]),
+                "radiotherapy": safe_int(row.iloc[y2_cols["radiotherapy"]]),
+                "chemotherapy": safe_int(row.iloc[y2_cols["chemotherapy"]]),
+                "tpa": safe_int(row.iloc[y2_cols["tpa"]]),
+                "dialysis": safe_int(row.iloc[y2_cols["dialysis"]]),
+                "rehab": safe_int(row.iloc[y2_cols["rehab"]]),
             }
+
+    # R6ではカラム構成が変更されている
+    y1_cols = Y1_COLS_R6 if year == "R6" else Y1_COLS
 
     # --- 様式1（病棟票）を処理 ---
     # 病院ごとに病棟情報を集計
@@ -255,26 +305,26 @@ def process_year(year: str) -> dict:
     })
 
     for _, row in df_y1.iterrows():
-        code = safe_str(row.iloc[Y1_COLS["hospital_code"]])
+        code = safe_str(row.iloc[y1_cols["hospital_code"]])
         if not code:
             continue
 
         h = hospitals[code]
         h["code"] = code
-        h["name"] = safe_str(row.iloc[Y1_COLS["hospital_name"]])
-        h["prefCode"] = safe_str(row.iloc[Y1_COLS["pref_code"]])
-        h["areaCode"] = safe_str(row.iloc[Y1_COLS["area_code"]])
-        h["areaName"] = safe_str(row.iloc[Y1_COLS["area_name"]])
+        h["name"] = safe_str(row.iloc[y1_cols["hospital_name"]])
+        h["prefCode"] = safe_str(row.iloc[y1_cols["pref_code"]])
+        h["areaCode"] = safe_str(row.iloc[y1_cols["area_code"]])
+        h["areaName"] = safe_str(row.iloc[y1_cols["area_name"]])
 
         # 機能区分
-        current_func_jp = safe_str(row.iloc[Y1_COLS["current_function"]])
-        future_func_jp = safe_str(row.iloc[Y1_COLS["future_function"]])
+        current_func_jp = safe_str(row.iloc[y1_cols["current_function"]])
+        future_func_jp = safe_str(row.iloc[y1_cols["future_function"]])
         current_func = FUNCTION_MAP.get(current_func_jp)
         future_func = FUNCTION_MAP.get(future_func_jp)
 
         # 病床数（一般 + 療養の許可病床数合計）
-        general_beds = safe_int(row.iloc[Y1_COLS["general_beds_permitted"]])
-        therapy_beds = safe_int(row.iloc[Y1_COLS["therapy_beds_permitted"]])
+        general_beds = safe_int(row.iloc[y1_cols["general_beds_permitted"]])
+        therapy_beds = safe_int(row.iloc[y1_cols["therapy_beds_permitted"]])
         ward_beds = general_beds + therapy_beds
 
         h["totalBeds"] += ward_beds
@@ -284,14 +334,14 @@ def process_year(year: str) -> dict:
             h["futureBedsByFunction"][future_func] += ward_beds
 
         # 職員数
-        h["nurses"] += safe_int(row.iloc[Y1_COLS["nurses"]])
+        h["nurses"] += safe_int(row.iloc[y1_cols["nurses"]])
 
         # 入院患者数
-        h["newAdmissions"] += safe_int(row.iloc[Y1_COLS["new_admissions_annual"]])
-        h["plannedAdmissions"] += safe_int(row.iloc[Y1_COLS["planned_admissions_annual"]])
+        h["newAdmissions"] += safe_int(row.iloc[y1_cols["new_admissions_annual"]])
+        h["plannedAdmissions"] += safe_int(row.iloc[y1_cols["planned_admissions_annual"]])
 
         # 様式2からの診療実績（ward_keyで正規化してマッチング）
-        raw_ward_code = safe_str(row.iloc[Y1_COLS["ward_code"]])
+        raw_ward_code = safe_str(row.iloc[y1_cols["ward_code"]])
         wk = ward_key(raw_ward_code) if raw_ward_code else ""
         if wk and wk in perf_by_ward:
             perf = perf_by_ward[wk]
@@ -307,11 +357,11 @@ def process_year(year: str) -> dict:
 
         # 病棟情報
         h["wards"].append({
-            "wardName": safe_str(row.iloc[Y1_COLS["ward_name"]]),
+            "wardName": safe_str(row.iloc[y1_cols["ward_name"]]),
             "functionType": current_func or "unknown",
             "futureFunctionType": future_func or "unknown",
             "beds": ward_beds,
-            "admissionFee": safe_str(row.iloc[Y1_COLS["admission_fee"]]),
+            "admissionFee": safe_str(row.iloc[y1_cols["admission_fee"]]),
         })
 
     # 救急車搬送件数を施設票から追加

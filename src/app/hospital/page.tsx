@@ -477,7 +477,7 @@ export default function HospitalPage() {
                         {ward.beds.toLocaleString()}
                       </td>
                       <td className="py-2 text-xs text-gray-500">
-                        {ward.admissionFee}
+                        {/^\d+$/.test(ward.admissionFee) ? "-" : ward.admissionFee}
                       </td>
                     </tr>
                   ))}
