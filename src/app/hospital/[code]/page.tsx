@@ -739,6 +739,9 @@ export default function HospitalDetailPage() {
               ))}
             </BarChart>
           </ResponsiveContainer>
+          <p className="mt-2 text-xs text-gray-400">
+            ※ 一部の病院で令和4年度と令和6年度の報告値が同一となるケースがあります（厚労省元データに起因）。
+          </p>
         </div>
       )}
 

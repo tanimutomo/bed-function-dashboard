@@ -180,6 +180,9 @@ export default function TrendPage() {
         ) : (
           <p className="py-20 text-center text-gray-400">データがありません</p>
         )}
+        <p className="mt-3 text-xs text-gray-400">
+          ※ 一部の病院で令和4年度（2022）と令和6年度（2024）の報告値が同一となるケースが確認されています。これは厚生労働省が公開する元データに起因するもので、本ダッシュボードでの加工によるものではありません。
+        </p>
       </div>
 
     </div>
