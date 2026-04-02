@@ -307,9 +307,7 @@ export default function AreaPage() {
                 />
                 <ZAxis
                   type="number"
-                  dataKey="surgeries"
-                  range={[20, 400]}
-                  name="手術件数"
+                  range={[60, 60]}
                 />
                 <Tooltip
                   formatter={(value: number, name: string) => {
@@ -339,7 +337,7 @@ export default function AreaPage() {
               </ScatterChart>
             </ResponsiveContainer>
             <p className="mt-2 text-xs text-gray-400">
-              バブルサイズは全身麻酔手術件数を表します
+              ホバーで手術件数も確認できます
             </p>
           </div>
         </>
