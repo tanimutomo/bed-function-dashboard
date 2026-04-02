@@ -25,7 +25,7 @@ import {
   PieChart,
   Pie,
 } from "recharts";
-import { fetchHospitalDetail, fetchAreaDetail, PREFECTURE_NAMES } from "@/lib/data";
+import { fetchHospitalDetail, fetchAreaDetail, fetchHospitalIndex, PREFECTURE_NAMES } from "@/lib/data";
 import { FUNCTION_LABELS, FUNCTION_COLORS } from "@/types";
 import type { FunctionType } from "@/types";
 
@@ -88,6 +88,9 @@ export default function HospitalDetailPage() {
   const code = params.code as string;
   const [detail, setDetail] = useState<HospitalDetailData | null>(null);
   const [areaDetail, setAreaDetail] = useState<AreaDetailData | null>(null);
+  const [areaHospitalsFromIndex, setAreaHospitalsFromIndex] = useState<
+    { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number> }[]
+  >([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -96,7 +99,27 @@ export default function HospitalDetailPage() {
       .then((d) => {
         setDetail(d);
         if (d.areaCode) {
-          fetchAreaDetail(d.areaCode).then(setAreaDetail);
+          // エリア詳細と病院インデックスを並行取得
+          Promise.all([
+            fetchAreaDetail(d.areaCode),
+            fetchHospitalIndex(),
+          ]).then(([area, idx]) => {
+            setAreaDetail(area);
+            // 同一構想区域の病院をインデックスから抽出（フォールバック用）
+            // インデックスのareaCodeは個別JSONと異なる体系の場合がある
+            // まず自院のインデックスエントリからareaCodeを取得し、それでマッチ
+            const selfInIndex = idx.find((h: { code: string }) => h.code === code);
+            const indexAreaCode = selfInIndex?.areaCode || d.areaCode;
+            const sameArea = idx
+              .filter((h: { areaCode: string }) => h.areaCode === indexAreaCode)
+              .map((h: { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number> }) => ({
+                code: h.code,
+                name: h.name,
+                totalBeds: h.totalBeds,
+                bedsByFunction: h.bedsByFunction,
+              }));
+            setAreaHospitalsFromIndex(sameArea);
+          });
         }
         setLoading(false);
       })
@@ -173,27 +196,60 @@ export default function HospitalDetailPage() {
       });
   }, [detail, sortedYears]);
 
-  // エリアデータの最新年度（病院と年度が異なる場合がある）
+  // エリアデータの最適年度を選択（bedsByFunctionが有効な年度を優先）
   const areaLatestYear = useMemo(() => {
     if (!areaDetail) return null;
     const areaYears = Object.keys(areaDetail.yearlyData).sort();
-    return areaYears.length > 0 ? areaYears[areaYears.length - 1] : null;
+    if (areaYears.length === 0) return null;
+    // bedsByFunctionが有効な最新年度を探す
+    const yearWithBf = [...areaYears].reverse().find((y) => {
+      const yd = areaDetail.yearlyData[y];
+      return yd.hospitals.some((h: { bedsByFunction: Record<string, number> }) =>
+        Object.values(h.bedsByFunction).some((v) => v > 0)
+      );
+    });
+    return yearWithBf || areaYears[areaYears.length - 1];
   }, [areaDetail]);
 
   // ===== 1. 競合ポジショニングマップ =====
   const positioningData = useMemo(() => {
-    if (!areaDetail || !areaLatestYear) return { hospitals: [], self: null };
-    const ayd = areaDetail.yearlyData[areaLatestYear];
-    if (!ayd) return { hospitals: [], self: null };
+    // エリアデータからbfが有効か確認
+    let sourceHospitals: { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number> }[] = [];
+    let dataSource: "area" | "index" = "area";
 
-    const hospitals = ayd.hospitals
+    if (areaDetail && areaLatestYear) {
+      const ayd = areaDetail.yearlyData[areaLatestYear];
+      if (ayd) {
+        const hasBf = ayd.hospitals.some((h: { bedsByFunction: Record<string, number> }) =>
+          Object.values(h.bedsByFunction).some((v) => v > 0)
+        );
+        if (hasBf) {
+          sourceHospitals = ayd.hospitals;
+        }
+      }
+    }
+
+    // エリアデータにbfがない場合、病院インデックスからフォールバック
+    if (sourceHospitals.length === 0 && areaHospitalsFromIndex.length > 0) {
+      sourceHospitals = areaHospitalsFromIndex;
+      dataSource = "index";
+    }
+
+    if (sourceHospitals.length === 0) return { hospitals: [], self: null, dataSource };
+
+    const hospitals = sourceHospitals
       .filter((h) => h.totalBeds > 0)
       .map((h) => {
         const bf = h.bedsByFunction;
         const total = h.totalBeds;
-        const acuteRatio = ((bf.high_acute + bf.acute) / total) * 100;
-        const recoveryRatio = (bf.recovery / total) * 100;
-        const chronicRatio = (bf.chronic / total) * 100;
+        const acuteVal = (bf.high_acute || 0) + (bf.acute || 0);
+        const recoveryVal = bf.recovery || 0;
+        const chronicVal = bf.chronic || 0;
+        const funcTotal = acuteVal + recoveryVal + chronicVal;
+        const base = funcTotal > 0 ? funcTotal : total;
+        const acuteRatio = (acuteVal / base) * 100;
+        const recoveryRatio = (recoveryVal / base) * 100;
+        const chronicRatio = (chronicVal / base) * 100;
         return {
           code: h.code,
           name: h.name,
@@ -205,20 +261,39 @@ export default function HospitalDetailPage() {
         };
       });
     const self = hospitals.find((h) => h.isSelf) || null;
-    return { hospitals, self };
-  }, [areaDetail, areaLatestYear, code]);
+    return { hospitals, self, dataSource };
+  }, [areaDetail, areaLatestYear, code, areaHospitalsFromIndex]);
 
   // ===== 2. 地域シェア分析 =====
   const shareData = useMemo(() => {
-    if (!areaDetail || !areaLatestYear || !latestData) return null;
-    const ayd = areaDetail.yearlyData[areaLatestYear];
-    if (!ayd) return null;
+    if (!latestData) return null;
 
-    const areaTotal = ayd.totalBeds;
-    const areaBf = ayd.bedsByFunction;
-    // エリアデータと同じ年度の自院データを使う（なければ最新年度で代替）
-    const selfYearData = (areaLatestYear && detail?.yearlyData[areaLatestYear]) || latestData;
-    const selfBf = selfYearData.bedsByFunction;
+    // エリアデータまたはインデックスから病院リストを取得
+    let areaHospitals: { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number> }[] = [];
+    if (areaDetail && areaLatestYear) {
+      const ayd = areaDetail.yearlyData[areaLatestYear];
+      if (ayd) {
+        const hasBf = ayd.hospitals.some((h: { bedsByFunction: Record<string, number> }) =>
+          Object.values(h.bedsByFunction).some((v) => v > 0)
+        );
+        if (hasBf) {
+          areaHospitals = ayd.hospitals;
+        }
+      }
+    }
+    if (areaHospitals.length === 0 && areaHospitalsFromIndex.length > 0) {
+      areaHospitals = areaHospitalsFromIndex;
+    }
+    if (areaHospitals.length === 0) return null;
+
+    const areaTotal = areaHospitals.reduce((s, h) => s + h.totalBeds, 0);
+    const areaBf: Record<string, number> = { high_acute: 0, acute: 0, recovery: 0, chronic: 0 };
+    for (const h of areaHospitals) {
+      for (const [k, v] of Object.entries(h.bedsByFunction)) {
+        areaBf[k] = (areaBf[k] || 0) + v;
+      }
+    }
+    const selfBf = latestData.bedsByFunction;
 
     // 機能別シェア
     const functionShares = (Object.keys(FUNCTION_LABELS) as FunctionType[]).map((key) => {
@@ -236,20 +311,20 @@ export default function HospitalDetailPage() {
     });
 
     // 総病床シェア
-    const totalShare = areaTotal > 0 ? (selfYearData.totalBeds / areaTotal) * 100 : 0;
+    const totalShare = areaTotal > 0 ? (latestData.totalBeds / areaTotal) * 100 : 0;
 
     // HHI（ハーフィンダール指数）: 総病床ベース
-    const hhi = ayd.hospitals.reduce((sum, h) => {
+    const hhi = areaHospitals.reduce((sum, h) => {
       const s = areaTotal > 0 ? (h.totalBeds / areaTotal) * 100 : 0;
       return sum + s * s;
     }, 0);
 
     // 区域内順位（総病床数）
-    const sorted = [...ayd.hospitals].sort((a, b) => b.totalBeds - a.totalBeds);
+    const sorted = [...areaHospitals].sort((a, b) => b.totalBeds - a.totalBeds);
     const rank = sorted.findIndex((h) => h.code === code) + 1;
 
     // 診療実績シェア（エリアデータの年度を使う）
-    const clinicalAyd = areaDetail.yearlyData[areaLatestYear];
+    const clinicalAyd = (areaDetail && areaLatestYear) ? areaDetail.yearlyData[areaLatestYear] : null;
     // 自院の診療実績（エリアと同年度、なければ臨床年度）
     const selfClinical = (areaLatestYear && detail?.yearlyData[areaLatestYear]) || clinicalData;
     const clinicalShares = clinicalAyd ? (() => {
@@ -283,10 +358,10 @@ export default function HospitalDetailPage() {
       totalShare: Math.round(totalShare * 10) / 10,
       hhi: Math.round(hhi),
       rank,
-      totalHospitals: ayd.hospitals.length,
+      totalHospitals: areaHospitals.length,
       clinicalShares,
     };
-  }, [areaDetail, areaLatestYear, latestData, code, clinicalData, detail]);
+  }, [areaDetail, areaLatestYear, latestData, code, clinicalData, detail, areaHospitalsFromIndex]);
 
   if (loading) {
     return (
