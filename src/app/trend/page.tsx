@@ -63,30 +63,6 @@ export default function TrendPage() {
     }
   }
 
-  // 都道府県別の回復期比率ランキング
-  const prefRecoveryRanking = Object.entries(prefData)
-    .map(([code, years]) => {
-      const latestYear = years[years.length - 1];
-      if (!latestYear || latestYear.totalBeds === 0) return null;
-      const recoveryRate =
-        (latestYear.bedsByFunction.recovery / latestYear.totalBeds) * 100;
-      return {
-        code,
-        name: PREFECTURE_NAMES[code] || code,
-        recoveryRate: Math.round(recoveryRate * 10) / 10,
-        recoveryBeds: latestYear.bedsByFunction.recovery,
-        totalBeds: latestYear.totalBeds,
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => b!.recoveryRate - a!.recoveryRate) as {
-    code: string;
-    name: string;
-    recoveryRate: number;
-    recoveryBeds: number;
-    totalBeds: number;
-  }[];
-
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6 flex items-center justify-between">
@@ -206,45 +182,6 @@ export default function TrendPage() {
         )}
       </div>
 
-      {/* 都道府県別回復期比率ランキング */}
-      <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-semibold">
-          都道府県別 回復期病床比率ランキング
-        </h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 text-left text-gray-500">
-                <th className="py-2 pr-4">順位</th>
-                <th className="py-2 pr-4">都道府県</th>
-                <th className="py-2 pr-4 text-right">回復期比率</th>
-                <th className="py-2 pr-4 text-right">回復期病床</th>
-                <th className="py-2 text-right">総病床数</th>
-              </tr>
-            </thead>
-            <tbody>
-              {prefRecoveryRanking.slice(0, 20).map((item, i) => (
-                <tr
-                  key={item.code}
-                  className="border-b border-gray-100 hover:bg-gray-50"
-                >
-                  <td className="py-2 pr-4 font-medium">{i + 1}</td>
-                  <td className="py-2 pr-4">{item.name}</td>
-                  <td className="py-2 pr-4 text-right font-medium">
-                    {item.recoveryRate}%
-                  </td>
-                  <td className="py-2 pr-4 text-right">
-                    {item.recoveryBeds.toLocaleString()}
-                  </td>
-                  <td className="py-2 text-right">
-                    {item.totalBeds.toLocaleString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }
