@@ -14,7 +14,7 @@ import {
   Scatter,
   ZAxis,
 } from "recharts";
-import { fetchAreaIndex, fetchAreaDetail, PREFECTURE_NAMES, PREFECTURE_LIST } from "@/lib/data";
+import { fetchAreaIndex, fetchAreaDetail, fetchHospitalIndex, PREFECTURE_NAMES, PREFECTURE_LIST } from "@/lib/data";
 import { FUNCTION_COLORS, FUNCTION_LABELS } from "@/types";
 import type { Area, FunctionType } from "@/types";
 
@@ -44,6 +44,7 @@ export default function AreaPage() {
   const [selectedArea, setSelectedArea] = useState<string>("");
   const [selectedPref, setSelectedPref] = useState<string>("all");
   const [areaDetail, setAreaDetail] = useState<AreaDetailData | null>(null);
+  const [fallbackHospitals, setFallbackHospitals] = useState<{ code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number> }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -56,7 +57,29 @@ export default function AreaPage() {
   useEffect(() => {
     if (selectedArea) {
       setAreaDetail(null);
-      fetchAreaDetail(selectedArea).then(setAreaDetail);
+      setFallbackHospitals([]);
+      Promise.all([
+        fetchAreaDetail(selectedArea),
+        fetchHospitalIndex(),
+      ]).then(([detail, idx]) => {
+        setAreaDetail(detail);
+        // エリアデータにbfが無い場合、hospital indexからフォールバック
+        const years = Object.keys(detail.yearlyData).sort();
+        const hasBf = years.some((y) => {
+          const yd = detail.yearlyData[y];
+          return yd.hospitals.some((h: { bedsByFunction: Record<string, number> }) =>
+            Object.values(h.bedsByFunction).some((v: number) => v > 0)
+          );
+        });
+        if (!hasBf) {
+          const sameArea = idx.filter((h: { areaCode: string }) => h.areaCode === selectedArea);
+          if (sameArea.length > 0) {
+            setFallbackHospitals(sameArea.map((h: { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number> }) => ({
+              code: h.code, name: h.name, totalBeds: h.totalBeds, bedsByFunction: h.bedsByFunction,
+            })));
+          }
+        }
+      });
     }
   }, [selectedArea]);
 
@@ -68,37 +91,65 @@ export default function AreaPage() {
     [areas, selectedPref]
   );
 
-  const latestYear = areaDetail
-    ? Object.keys(areaDetail.yearlyData).sort().pop()
-    : null;
+  // bfデータがある年度を優先選択
+  const latestYear = useMemo(() => {
+    if (!areaDetail) return null;
+    const years = Object.keys(areaDetail.yearlyData).sort();
+    const yearWithBf = [...years].reverse().find((y) => {
+      const yd = areaDetail.yearlyData[y];
+      return yd.hospitals.some((h) =>
+        Object.values(h.bedsByFunction).some((v) => v > 0)
+      );
+    });
+    return yearWithBf || years[years.length - 1] || null;
+  }, [areaDetail]);
+
   const latestData = latestYear
     ? areaDetail?.yearlyData[latestYear]
     : null;
 
+  // フォールバック含む病院リスト
+  const effectiveHospitals = useMemo(() => {
+    if (latestData) {
+      const hasBf = latestData.hospitals.some((h) =>
+        Object.values(h.bedsByFunction).some((v) => v > 0)
+      );
+      if (hasBf) return latestData.hospitals;
+    }
+    if (fallbackHospitals.length > 0) {
+      return fallbackHospitals.map((h) => ({
+        ...h,
+        emergencyTransports: 0,
+        surgeriesGA: 0,
+      }));
+    }
+    return latestData?.hospitals || [];
+  }, [latestData, fallbackHospitals]);
+
   // 病院別棒グラフデータ
   const hospitalBarData = useMemo(() => {
-    if (!latestData) return [];
-    return latestData.hospitals
+    if (effectiveHospitals.length === 0) return [];
+    return [...effectiveHospitals]
       .sort((a, b) => b.totalBeds - a.totalBeds)
       .slice(0, 20)
       .map((h) => ({
         name: h.name.length > 12 ? h.name.slice(0, 12) + "..." : h.name,
         ...h.bedsByFunction,
       }));
-  }, [latestData]);
+  }, [effectiveHospitals]);
 
   // 散布図データ
   const scatterData = useMemo(() => {
-    if (!latestData) return [];
-    return latestData.hospitals
+    if (effectiveHospitals.length === 0) return [];
+    return effectiveHospitals
       .filter((h) => h.totalBeds > 0)
       .map((h) => ({
         name: h.name,
         beds: h.totalBeds,
-        emergency: h.emergencyTransports,
-        surgeries: h.surgeriesGA,
+        emergency: 'emergencyTransports' in h ? h.emergencyTransports : 0,
+        surgeries: 'surgeriesGA' in h ? h.surgeriesGA : 0,
       }));
-  }, [latestData]);
+  }, [effectiveHospitals]);
 
   if (loading) {
     return (
@@ -154,7 +205,7 @@ export default function AreaPage() {
         </div>
       )}
 
-      {areaDetail && latestData && (
+      {areaDetail && (latestData || effectiveHospitals.length > 0) && (
         <>
           {/* 区域サマリー */}
           <div className="mb-6 grid gap-4 sm:grid-cols-4">
@@ -165,25 +216,23 @@ export default function AreaPage() {
             <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
               <p className="text-xs text-gray-500">総病床数</p>
               <p className="text-lg font-bold">
-                {latestData.totalBeds.toLocaleString()}床
+                {effectiveHospitals.reduce((s, h) => s + h.totalBeds, 0).toLocaleString()}床
               </p>
             </div>
             <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
               <p className="text-xs text-gray-500">病院数</p>
               <p className="text-lg font-bold">
-                {latestData.hospitals.length}施設
+                {effectiveHospitals.length}施設
               </p>
             </div>
             <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
               <p className="text-xs text-gray-500">回復期比率</p>
               <p className="text-lg font-bold">
-                {latestData.totalBeds > 0
-                  ? (
-                      (latestData.bedsByFunction.recovery /
-                        latestData.totalBeds) *
-                      100
-                    ).toFixed(1)
-                  : 0}
+                {(() => {
+                  const total = effectiveHospitals.reduce((s, h) => s + h.totalBeds, 0);
+                  const recovery = effectiveHospitals.reduce((s, h) => s + (h.bedsByFunction.recovery || 0), 0);
+                  return total > 0 ? ((recovery / total) * 100).toFixed(1) : "0.0";
+                })()}
                 %
               </p>
             </div>
