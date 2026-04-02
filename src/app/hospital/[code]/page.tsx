@@ -21,7 +21,6 @@ import {
   Scatter,
   ZAxis,
   Cell,
-  LabelList,
   PieChart,
   Pie,
 } from "recharts";
@@ -582,16 +581,6 @@ export default function HospitalDetailPage() {
                     strokeWidth={h.isSelf ? 2 : 1}
                   />
                 ))}
-                <LabelList
-                  dataKey="name"
-                  position="top"
-                  offset={8}
-                  style={{ fontSize: 10 }}
-                  formatter={(name: string) => {
-                    const h = positioningData.hospitals.find((x) => x.name === name);
-                    return h?.isSelf ? name.slice(0, 10) : "";
-                  }}
-                />
               </Scatter>
             </ScatterChart>
           </ResponsiveContainer>
