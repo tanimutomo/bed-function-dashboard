@@ -20,20 +20,20 @@ interface JapanMapProps {
 
 function getColor(value: number, metric: "recoveryRate" | "acuteRate"): string {
   if (metric === "recoveryRate") {
-    // 回復期比率: 低い(赤) → 高い(緑)
-    if (value >= 25) return "#15803d";
-    if (value >= 20) return "#22c55e";
-    if (value >= 15) return "#86efac";
+    // 回復期比率: 低い(赤) → 高い(緑)  実データ範囲: 約3%〜24%
+    if (value >= 22) return "#15803d";
+    if (value >= 18) return "#22c55e";
+    if (value >= 14) return "#86efac";
     if (value >= 10) return "#fde047";
-    if (value >= 5) return "#fb923c";
+    if (value >= 6) return "#fb923c";
     return "#ef4444";
   } else {
-    // 急性期比率: 高い(赤 = 過剰) → 低い(緑)
-    if (value >= 70) return "#ef4444";
+    // 急性期比率: 高い(赤 = 過剰) → 低い(緑)  実データ範囲: 約42%〜66%
+    if (value >= 65) return "#ef4444";
     if (value >= 60) return "#fb923c";
-    if (value >= 50) return "#fde047";
-    if (value >= 40) return "#86efac";
-    if (value >= 30) return "#22c55e";
+    if (value >= 55) return "#fde047";
+    if (value >= 50) return "#86efac";
+    if (value >= 45) return "#22c55e";
     return "#15803d";
   }
 }

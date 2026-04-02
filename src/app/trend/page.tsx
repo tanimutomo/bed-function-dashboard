@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TrendAreaChart } from "@/components/charts/trend-area-chart";
-import { FunctionBarChart } from "@/components/charts/function-bar-chart";
 import { fetchNationalSummary, fetchPrefectureSummary, PREFECTURE_NAMES, PREFECTURE_LIST } from "@/lib/data";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { NationalSummary } from "@/types";
@@ -39,11 +37,6 @@ export default function TrendPage() {
   const displayData = rawData.filter(
     (d) => d.totalBeds > 0 && Object.values(d.bedsByFunction).some((v) => v > 0)
   );
-
-  const trendData = displayData.map((d) => ({
-    year: d.year,
-    ...d.bedsByFunction,
-  }));
 
   const latest = displayData[displayData.length - 1];
   const earliest = displayData[0];
@@ -150,22 +143,66 @@ export default function TrendPage() {
         </div>
       )}
 
-      {/* トレンドチャート */}
+      {/* トレンドテーブル */}
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold">
           機能別病床数の推移
           {selectedPref !== "all" &&
             ` - ${PREFECTURE_NAMES[selectedPref]}`}
         </h2>
-        {trendData.length > 0 ? (
-          <TrendAreaChart data={trendData} height={400} />
+        {displayData.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-gray-500">
+                  <th className="py-2 pr-4">年度</th>
+                  <th className="py-2 pr-4 text-right">高度急性期</th>
+                  <th className="py-2 pr-4 text-right">急性期</th>
+                  <th className="py-2 pr-4 text-right">回復期</th>
+                  <th className="py-2 pr-4 text-right">慢性期</th>
+                  <th className="py-2 text-right">合計</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayData.map((d, i) => {
+                  const prev = i > 0 ? displayData[i - 1] : null;
+                  const diffStr = (cur: number, prevVal: number | undefined) => {
+                    if (prevVal == null || prevVal === 0) return "";
+                    const diff = cur - prevVal;
+                    const rate = ((diff / prevVal) * 100).toFixed(1);
+                    return diff > 0 ? ` (+${rate}%)` : ` (${rate}%)`;
+                  };
+                  return (
+                    <tr key={d.year} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-2 pr-4 font-medium">{d.year}年度</td>
+                      <td className="py-2 pr-4 text-right">
+                        {d.bedsByFunction.high_acute.toLocaleString()}
+                        {prev && <span className="text-xs text-gray-400">{diffStr(d.bedsByFunction.high_acute, prev.bedsByFunction.high_acute)}</span>}
+                      </td>
+                      <td className="py-2 pr-4 text-right">
+                        {d.bedsByFunction.acute.toLocaleString()}
+                        {prev && <span className="text-xs text-gray-400">{diffStr(d.bedsByFunction.acute, prev.bedsByFunction.acute)}</span>}
+                      </td>
+                      <td className="py-2 pr-4 text-right">
+                        {d.bedsByFunction.recovery.toLocaleString()}
+                        {prev && <span className="text-xs text-gray-400">{diffStr(d.bedsByFunction.recovery, prev.bedsByFunction.recovery)}</span>}
+                      </td>
+                      <td className="py-2 pr-4 text-right">
+                        {d.bedsByFunction.chronic.toLocaleString()}
+                        {prev && <span className="text-xs text-gray-400">{diffStr(d.bedsByFunction.chronic, prev.bedsByFunction.chronic)}</span>}
+                      </td>
+                      <td className="py-2 text-right font-medium">
+                        {d.totalBeds.toLocaleString()}
+                        {prev && <span className="text-xs text-gray-400">{diffStr(d.totalBeds, prev.totalBeds)}</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <p className="py-20 text-center text-gray-400">データがありません</p>
-        )}
-        {trendData.length === 1 && (
-          <p className="mt-2 text-center text-sm text-gray-400">
-            現在1年度分のデータのみ表示。複数年度のデータを追加すると経年推移が確認できます。
-          </p>
         )}
       </div>
 

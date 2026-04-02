@@ -55,6 +55,7 @@ export default function AreaPage() {
 
   useEffect(() => {
     if (selectedArea) {
+      setAreaDetail(null);
       fetchAreaDetail(selectedArea).then(setAreaDetail);
     }
   }, [selectedArea]);
