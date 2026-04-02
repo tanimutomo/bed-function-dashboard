@@ -17,6 +17,13 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  ScatterChart,
+  Scatter,
+  ZAxis,
+  Cell,
+  LabelList,
+  PieChart,
+  Pie,
 } from "recharts";
 import { fetchHospitalDetail, fetchAreaDetail, PREFECTURE_NAMES } from "@/lib/data";
 import { FUNCTION_LABELS, FUNCTION_COLORS } from "@/types";
@@ -165,6 +172,121 @@ export default function HospitalDetailPage() {
         };
       });
   }, [detail, sortedYears]);
+
+  // エリアデータの最新年度（病院と年度が異なる場合がある）
+  const areaLatestYear = useMemo(() => {
+    if (!areaDetail) return null;
+    const areaYears = Object.keys(areaDetail.yearlyData).sort();
+    return areaYears.length > 0 ? areaYears[areaYears.length - 1] : null;
+  }, [areaDetail]);
+
+  // ===== 1. 競合ポジショニングマップ =====
+  const positioningData = useMemo(() => {
+    if (!areaDetail || !areaLatestYear) return { hospitals: [], self: null };
+    const ayd = areaDetail.yearlyData[areaLatestYear];
+    if (!ayd) return { hospitals: [], self: null };
+
+    const hospitals = ayd.hospitals
+      .filter((h) => h.totalBeds > 0)
+      .map((h) => {
+        const bf = h.bedsByFunction;
+        const total = h.totalBeds;
+        const acuteRatio = ((bf.high_acute + bf.acute) / total) * 100;
+        const recoveryRatio = (bf.recovery / total) * 100;
+        const chronicRatio = (bf.chronic / total) * 100;
+        return {
+          code: h.code,
+          name: h.name,
+          totalBeds: total,
+          acuteRatio: Math.round(acuteRatio * 10) / 10,
+          recoveryRatio: Math.round(recoveryRatio * 10) / 10,
+          chronicRatio: Math.round(chronicRatio * 10) / 10,
+          isSelf: h.code === code,
+        };
+      });
+    const self = hospitals.find((h) => h.isSelf) || null;
+    return { hospitals, self };
+  }, [areaDetail, areaLatestYear, code]);
+
+  // ===== 2. 地域シェア分析 =====
+  const shareData = useMemo(() => {
+    if (!areaDetail || !areaLatestYear || !latestData) return null;
+    const ayd = areaDetail.yearlyData[areaLatestYear];
+    if (!ayd) return null;
+
+    const areaTotal = ayd.totalBeds;
+    const areaBf = ayd.bedsByFunction;
+    // エリアデータと同じ年度の自院データを使う（なければ最新年度で代替）
+    const selfYearData = (areaLatestYear && detail?.yearlyData[areaLatestYear]) || latestData;
+    const selfBf = selfYearData.bedsByFunction;
+
+    // 機能別シェア
+    const functionShares = (Object.keys(FUNCTION_LABELS) as FunctionType[]).map((key) => {
+      const areaVal = areaBf[key] || 0;
+      const selfVal = selfBf[key] || 0;
+      const share = areaVal > 0 ? (selfVal / areaVal) * 100 : 0;
+      return {
+        function: key,
+        label: FUNCTION_LABELS[key],
+        selfBeds: selfVal,
+        areaBeds: areaVal,
+        share: Math.round(share * 10) / 10,
+        color: FUNCTION_COLORS[key],
+      };
+    });
+
+    // 総病床シェア
+    const totalShare = areaTotal > 0 ? (selfYearData.totalBeds / areaTotal) * 100 : 0;
+
+    // HHI（ハーフィンダール指数）: 総病床ベース
+    const hhi = ayd.hospitals.reduce((sum, h) => {
+      const s = areaTotal > 0 ? (h.totalBeds / areaTotal) * 100 : 0;
+      return sum + s * s;
+    }, 0);
+
+    // 区域内順位（総病床数）
+    const sorted = [...ayd.hospitals].sort((a, b) => b.totalBeds - a.totalBeds);
+    const rank = sorted.findIndex((h) => h.code === code) + 1;
+
+    // 診療実績シェア（エリアデータの年度を使う）
+    const clinicalAyd = areaDetail.yearlyData[areaLatestYear];
+    // 自院の診療実績（エリアと同年度、なければ臨床年度）
+    const selfClinical = (areaLatestYear && detail?.yearlyData[areaLatestYear]) || clinicalData;
+    const clinicalShares = clinicalAyd ? (() => {
+      const totalEmergency = clinicalAyd.hospitals.reduce((s, h) => s + h.emergencyTransports, 0);
+      const totalSurgery = clinicalAyd.hospitals.reduce((s, h) => s + h.surgeriesGA, 0);
+      const totalChemo = clinicalAyd.hospitals.reduce((s, h) => s + h.chemotherapy, 0);
+      return [
+        {
+          label: "救急搬送",
+          selfVal: selfClinical?.emergencyTransports || 0,
+          areaVal: totalEmergency,
+          share: totalEmergency > 0 ? Math.round(((selfClinical?.emergencyTransports || 0) / totalEmergency) * 1000) / 10 : 0,
+        },
+        {
+          label: "全身麻酔手術",
+          selfVal: selfClinical?.surgeriesGA || 0,
+          areaVal: totalSurgery,
+          share: totalSurgery > 0 ? Math.round(((selfClinical?.surgeriesGA || 0) / totalSurgery) * 1000) / 10 : 0,
+        },
+        {
+          label: "化学療法",
+          selfVal: selfClinical?.chemotherapy || 0,
+          areaVal: totalChemo,
+          share: totalChemo > 0 ? Math.round(((selfClinical?.chemotherapy || 0) / totalChemo) * 1000) / 10 : 0,
+        },
+      ];
+    })() : [];
+
+    return {
+      functionShares,
+      totalShare: Math.round(totalShare * 10) / 10,
+      hhi: Math.round(hhi),
+      rank,
+      totalHospitals: ayd.hospitals.length,
+      clinicalShares,
+    };
+  }, [areaDetail, areaLatestYear, latestData, code, clinicalData, detail]);
 
   if (loading) {
     return (
@@ -324,6 +446,196 @@ export default function HospitalDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ===== 競合ポジショニングマップ ===== */}
+      {positioningData.hospitals.length > 1 && (
+        <div className="mt-6 rounded-lg border border-blue-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-1 text-lg font-semibold">
+            競合ポジショニングマップ
+          </h3>
+          <p className="mb-4 text-xs text-gray-400">
+            {detail.areaName}構想区域内の全{positioningData.hospitals.length}病院　|　X軸: 急性期比率　Y軸: 回復期比率　バブルサイズ: 総病床数
+          </p>
+          <ResponsiveContainer width="100%" height={400}>
+            <ScatterChart margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                type="number"
+                dataKey="acuteRatio"
+                name="急性期比率"
+                unit="%"
+                domain={[0, 100]}
+                tick={{ fontSize: 11 }}
+                label={{ value: "急性期比率 (%)", position: "bottom", offset: 0, fontSize: 12 }}
+              />
+              <YAxis
+                type="number"
+                dataKey="recoveryRatio"
+                name="回復期比率"
+                unit="%"
+                domain={[0, 100]}
+                tick={{ fontSize: 11 }}
+                label={{ value: "回復期比率 (%)", angle: -90, position: "insideLeft", offset: 10, fontSize: 12 }}
+              />
+              <ZAxis
+                type="number"
+                dataKey="totalBeds"
+                range={[40, 800]}
+                name="病床数"
+              />
+              <Tooltip
+                cursor={{ strokeDasharray: "3 3" }}
+                content={({ active, payload }) => {
+                  if (!active || !payload?.[0]) return null;
+                  const d = payload[0].payload;
+                  return (
+                    <div className="rounded-lg border bg-white p-3 text-xs shadow-lg">
+                      <p className="mb-1 font-bold">{d.name}</p>
+                      <p>急性期: {d.acuteRatio}%　回復期: {d.recoveryRatio}%　慢性期: {d.chronicRatio}%</p>
+                      <p>総病床数: {d.totalBeds.toLocaleString()}床</p>
+                    </div>
+                  );
+                }}
+              />
+              <Scatter data={positioningData.hospitals} isAnimationActive={false}>
+                {positioningData.hospitals.map((h, i) => (
+                  <Cell
+                    key={i}
+                    fill={h.isSelf ? "#2563eb" : "#94a3b8"}
+                    fillOpacity={h.isSelf ? 0.9 : 0.4}
+                    stroke={h.isSelf ? "#1d4ed8" : "#cbd5e1"}
+                    strokeWidth={h.isSelf ? 2 : 1}
+                  />
+                ))}
+                <LabelList
+                  dataKey="name"
+                  position="top"
+                  offset={8}
+                  style={{ fontSize: 10 }}
+                  formatter={(name: string) => {
+                    const h = positioningData.hospitals.find((x) => x.name === name);
+                    return h?.isSelf ? name.slice(0, 10) : "";
+                  }}
+                />
+              </Scatter>
+            </ScatterChart>
+          </ResponsiveContainer>
+          {positioningData.self && (
+            <div className="mt-3 flex flex-wrap gap-3 text-xs">
+              <span className="rounded-full bg-blue-100 px-3 py-1 font-medium text-blue-800">
+                {detail.name.slice(0, 15)}: 急性期 {positioningData.self.acuteRatio}% / 回復期 {positioningData.self.recoveryRatio}% / 慢性期 {positioningData.self.chronicRatio}%
+              </span>
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-600">
+                灰色バブル = 同区域内の他院
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===== 地域シェア分析 ===== */}
+      {shareData && (
+        <div className="mt-6 rounded-lg border border-green-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-1 text-lg font-semibold">
+            地域シェア分析
+          </h3>
+          <p className="mb-4 text-xs text-gray-400">
+            {detail.areaName}構想区域内でのポジション
+          </p>
+
+          {/* シェアKPI */}
+          <div className="mb-6 grid gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+              <p className="text-xs text-gray-500">区域内順位</p>
+              <p className="text-xl font-bold text-gray-900">
+                {shareData.rank}<span className="text-sm font-normal text-gray-500">/{shareData.totalHospitals}施設</span>
+              </p>
+            </div>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+              <p className="text-xs text-gray-500">総病床シェア</p>
+              <p className="text-xl font-bold text-gray-900">{shareData.totalShare}%</p>
+            </div>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+              <p className="text-xs text-gray-500">地域集中度 (HHI)</p>
+              <p className="text-xl font-bold text-gray-900">
+                {shareData.hhi.toLocaleString()}
+                <span className="ml-1 text-xs font-normal text-gray-500">
+                  {shareData.hhi < 1500 ? "分散的" : shareData.hhi < 2500 ? "中程度" : "集中的"}
+                </span>
+              </p>
+            </div>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+              <p className="text-xs text-gray-500">区域内病院数</p>
+              <p className="text-xl font-bold text-gray-900">{shareData.totalHospitals}施設</p>
+            </div>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* 機能別シェア */}
+            <div>
+              <h4 className="mb-3 text-sm font-semibold text-gray-700">機能別 病床シェア</h4>
+              <div className="space-y-3">
+                {shareData.functionShares.map((fs) => (
+                  <div key={fs.function}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5">
+                        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: fs.color }} />
+                        {fs.label}
+                      </span>
+                      <span className="font-medium">
+                        {fs.selfBeds.toLocaleString()} / {fs.areaBeds.toLocaleString()}床
+                        <span className="ml-1 font-bold" style={{ color: fs.color }}>
+                          ({fs.share}%)
+                        </span>
+                      </span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${Math.min(fs.share, 100)}%`,
+                          backgroundColor: fs.color,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 診療実績シェア */}
+            {shareData.clinicalShares.length > 0 && (
+              <div>
+                <h4 className="mb-3 text-sm font-semibold text-gray-700">診療実績 シェア</h4>
+                <div className="space-y-3">
+                  {shareData.clinicalShares.map((cs) => (
+                    <div key={cs.label}>
+                      <div className="mb-1 flex items-center justify-between text-xs">
+                        <span>{cs.label}</span>
+                        <span className="font-medium">
+                          {cs.selfVal.toLocaleString()} / {cs.areaVal.toLocaleString()}件
+                          <span className="ml-1 font-bold text-blue-600">
+                            ({cs.share}%)
+                          </span>
+                        </span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className="h-full rounded-full bg-blue-500 transition-all"
+                          style={{ width: `${Math.min(cs.share, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {clinicalYear && clinicalYear !== latestYear && (
+                  <p className="mt-2 text-xs text-gray-400">※ 診療実績は{clinicalYear}年度データ</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 年度別病床推移 */}
       {yearlyTrendData.length > 1 && (
