@@ -269,6 +269,7 @@ export default function HospitalDetailPage() {
 
     // エリアデータまたはインデックスから病院リストを取得
     let areaHospitals: { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number> }[] = [];
+    let usingAreaDetail = false;
     if (areaDetail && areaLatestYear) {
       const ayd = areaDetail.yearlyData[areaLatestYear];
       if (ayd) {
@@ -277,6 +278,7 @@ export default function HospitalDetailPage() {
         );
         if (hasBf) {
           areaHospitals = ayd.hospitals;
+          usingAreaDetail = true;
         }
       }
     }
@@ -323,34 +325,38 @@ export default function HospitalDetailPage() {
     const rank = sorted.findIndex((h) => h.code === code) + 1;
 
     // 診療実績シェア（エリアデータの年度を使う）
-    const clinicalAyd = (areaDetail && areaLatestYear) ? areaDetail.yearlyData[areaLatestYear] : null;
-    // 自院の診療実績（エリアと同年度、なければ臨床年度）
-    const selfClinical = (areaLatestYear && detail?.yearlyData[areaLatestYear]) || clinicalData;
-    const clinicalShares = clinicalAyd ? (() => {
-      const totalEmergency = clinicalAyd.hospitals.reduce((s, h) => s + h.emergencyTransports, 0);
-      const totalSurgery = clinicalAyd.hospitals.reduce((s, h) => s + h.surgeriesGA, 0);
-      const totalChemo = clinicalAyd.hospitals.reduce((s, h) => s + h.chemotherapy, 0);
-      return [
-        {
-          label: "救急搬送",
-          selfVal: selfClinical?.emergencyTransports || 0,
-          areaVal: totalEmergency,
-          share: totalEmergency > 0 ? Math.round(((selfClinical?.emergencyTransports || 0) / totalEmergency) * 1000) / 10 : 0,
-        },
-        {
-          label: "全身麻酔手術",
-          selfVal: selfClinical?.surgeriesGA || 0,
-          areaVal: totalSurgery,
-          share: totalSurgery > 0 ? Math.round(((selfClinical?.surgeriesGA || 0) / totalSurgery) * 1000) / 10 : 0,
-        },
-        {
-          label: "化学療法",
-          selfVal: selfClinical?.chemotherapy || 0,
-          areaVal: totalChemo,
-          share: totalChemo > 0 ? Math.round(((selfClinical?.chemotherapy || 0) / totalChemo) * 1000) / 10 : 0,
-        },
-      ];
-    })() : [];
+    // フォールバック（hospital index）使用時は個別病院の診療実績データがないため非表示
+    let clinicalShares: { label: string; selfVal: number; areaVal: number; share: number }[] = [];
+    if (usingAreaDetail && areaDetail && areaLatestYear) {
+      // エリアデータ由来の病院リストを使っている場合のみ診療実績シェアを計算
+      const clinicalAyd = areaDetail.yearlyData[areaLatestYear];
+      const selfClinical = (detail?.yearlyData[areaLatestYear]) || clinicalData;
+      if (clinicalAyd && clinicalAyd.hospitals.length > 1) {
+        const totalEmergency = clinicalAyd.hospitals.reduce((s: number, h: { emergencyTransports: number }) => s + h.emergencyTransports, 0);
+        const totalSurgery = clinicalAyd.hospitals.reduce((s: number, h: { surgeriesGA: number }) => s + h.surgeriesGA, 0);
+        const totalChemo = clinicalAyd.hospitals.reduce((s: number, h: { chemotherapy: number }) => s + h.chemotherapy, 0);
+        clinicalShares = [
+          {
+            label: "救急搬送",
+            selfVal: selfClinical?.emergencyTransports || 0,
+            areaVal: totalEmergency,
+            share: totalEmergency > 0 ? Math.round(((selfClinical?.emergencyTransports || 0) / totalEmergency) * 1000) / 10 : 0,
+          },
+          {
+            label: "全身麻酔手術",
+            selfVal: selfClinical?.surgeriesGA || 0,
+            areaVal: totalSurgery,
+            share: totalSurgery > 0 ? Math.round(((selfClinical?.surgeriesGA || 0) / totalSurgery) * 1000) / 10 : 0,
+          },
+          {
+            label: "化学療法",
+            selfVal: selfClinical?.chemotherapy || 0,
+            areaVal: totalChemo,
+            share: totalChemo > 0 ? Math.round(((selfClinical?.chemotherapy || 0) / totalChemo) * 1000) / 10 : 0,
+          },
+        ];
+      }
+    }
 
     return {
       functionShares,
