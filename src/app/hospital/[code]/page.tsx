@@ -517,7 +517,7 @@ export default function HospitalDetailPage() {
                   </div>
                   {future !== current && future > 0 && (
                     <p className="mt-0.5 text-xs text-gray-400">
-                      6年後予定: {future.toLocaleString()}床
+                      {Number(latestYear) + 6}年度予定: {future.toLocaleString()}床
                     </p>
                   )}
                 </div>
@@ -750,8 +750,8 @@ export default function HospitalDetailPage() {
             <thead>
               <tr className="border-b border-gray-200 text-left text-gray-500">
                 <th className="py-2 pr-4">病棟名</th>
-                <th className="py-2 pr-4">現在の機能</th>
-                <th className="py-2 pr-4">6年後予定</th>
+                <th className="py-2 pr-4">{latestYear}年度</th>
+                <th className="py-2 pr-4">{Number(latestYear) + 6}年度予定</th>
                 <th className="py-2 pr-4 text-right">病床数</th>
                 <th className="py-2">算定入院料</th>
               </tr>
