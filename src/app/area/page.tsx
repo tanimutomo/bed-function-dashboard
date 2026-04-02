@@ -72,7 +72,16 @@ export default function AreaPage() {
           );
         });
         if (!hasBf) {
-          const sameArea = idx.filter((h: { areaCode: string }) => h.areaCode === selectedArea);
+          // まずエリアコードで直接マッチ
+          let sameArea = idx.filter((h: { areaCode: string }) => h.areaCode === selectedArea);
+          // マッチしない場合、エリアJSON内の病院コードでindexから検索
+          if (sameArea.length === 0) {
+            const latestYd = detail.yearlyData[years[years.length - 1]];
+            if (latestYd) {
+              const areaCodes = new Set(latestYd.hospitals.map((h: { code: string }) => h.code));
+              sameArea = idx.filter((h: { code: string }) => areaCodes.has(h.code));
+            }
+          }
           if (sameArea.length > 0) {
             setFallbackHospitals(sameArea.map((h: { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number> }) => ({
               code: h.code, name: h.name, totalBeds: h.totalBeds, bedsByFunction: h.bedsByFunction,
