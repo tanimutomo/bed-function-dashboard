@@ -251,7 +251,7 @@ export default function HospitalDetailPage() {
         const chronicRatio = (chronicVal / base) * 100;
         return {
           code: h.code,
-          name: h.name,
+          hospitalName: h.name,
           totalBeds: total,
           acuteRatio: Math.round(acuteRatio * 10) / 10,
           recoveryRatio: Math.round(recoveryRatio * 10) / 10,
@@ -564,7 +564,7 @@ export default function HospitalDetailPage() {
                   const d = payload[0].payload;
                   return (
                     <div className="rounded-lg border bg-white p-3 text-xs shadow-lg">
-                      <p className="mb-1 font-bold">{d.name}</p>
+                      <p className="mb-1 font-bold">{d.hospitalName}</p>
                       <p>急性期: {d.acuteRatio}%　回復期: {d.recoveryRatio}%　慢性期: {d.chronicRatio}%</p>
                       <p>総病床数: {d.totalBeds.toLocaleString()}床</p>
                     </div>
