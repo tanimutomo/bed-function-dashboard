@@ -61,6 +61,36 @@ export async function fetch630Summary() {
   return res.json();
 }
 
+export interface PopulationData {
+  totalPopulation: number;
+  populationUnder15: number;
+  population15to64: number;
+  population65over: number;
+  agingRate: number;
+}
+
+export async function fetchPopulation(): Promise<{
+  censusYear: string;
+  prefectures: Record<string, PopulationData>;
+}> {
+  const res = await fetch(`${BASE_PATH}/summary/population.json`);
+  const data = await res.json();
+  // キーをゼロパディング
+  const normalized: Record<string, PopulationData> = {};
+  for (const [key, value] of Object.entries(data.prefectures)) {
+    normalized[key.padStart(2, "0")] = value as PopulationData;
+  }
+  return { censusYear: data.censusYear, prefectures: normalized };
+}
+
+export async function fetchPopulationAreas(): Promise<{
+  censusYear: string;
+  areas: Record<string, PopulationData>;
+}> {
+  const res = await fetch(`${BASE_PATH}/summary/population_areas.json`);
+  return res.json();
+}
+
 /** 都道府県コード→名称（ソート済み配列） */
 export const PREFECTURE_LIST: [string, string][] = [
   ["01", "北海道"], ["02", "青森県"], ["03", "岩手県"], ["04", "宮城県"], ["05", "秋田県"],

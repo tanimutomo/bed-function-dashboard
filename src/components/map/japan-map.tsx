@@ -8,33 +8,42 @@ import "leaflet/dist/leaflet.css";
 
 interface PrefectureData {
   totalBeds: number;
-  recoveryRate: number; // 回復期比率
-  acuteRate: number; // 急性期比率
+  recoveryRate: number;
+  acuteRate: number;
+  agingRate?: number;
 }
+
+type ColorMetric = "recoveryRate" | "acuteRate" | "agingRate";
 
 interface JapanMapProps {
   prefectureData: Record<string, PrefectureData>;
   height?: number;
-  colorMetric?: "recoveryRate" | "acuteRate";
+  colorMetric?: ColorMetric;
 }
 
-function getColor(value: number, metric: "recoveryRate" | "acuteRate"): string {
+function getColor(value: number, metric: ColorMetric): string {
   if (metric === "recoveryRate") {
-    // 回復期比率: 低い(赤) → 高い(緑)  実データ範囲: 約3%〜24%
     if (value >= 22) return "#15803d";
     if (value >= 18) return "#22c55e";
     if (value >= 14) return "#86efac";
     if (value >= 10) return "#fde047";
     if (value >= 6) return "#fb923c";
     return "#ef4444";
-  } else {
-    // 急性期比率: 高い(赤 = 過剰) → 低い(緑)  実データ範囲: 約42%〜66%
+  } else if (metric === "acuteRate") {
     if (value >= 65) return "#ef4444";
     if (value >= 60) return "#fb923c";
     if (value >= 55) return "#fde047";
     if (value >= 50) return "#86efac";
     if (value >= 45) return "#22c55e";
     return "#15803d";
+  } else {
+    // 高齢化率: 実データ範囲 約22%〜37%
+    if (value >= 35) return "#7c3aed";
+    if (value >= 32) return "#8b5cf6";
+    if (value >= 29) return "#a78bfa";
+    if (value >= 26) return "#c4b5fd";
+    if (value >= 23) return "#ddd6fe";
+    return "#ede9fe";
   }
 }
 
@@ -68,7 +77,7 @@ export default function JapanMap({
     }
     const code = String(feature.properties.code || feature.properties.N03_001 || "").padStart(2, "0");
     const data = prefectureData[code];
-    const value = data ? data[colorMetric] : 0;
+    const value = data ? (data[colorMetric] ?? 0) : 0;
     return {
       fillColor: getColor(value, colorMetric),
       weight: 1,
@@ -88,7 +97,8 @@ export default function JapanMap({
         `<strong>${name}</strong><br/>` +
           `総病床数: ${data.totalBeds.toLocaleString()}<br/>` +
           `回復期比率: ${data.recoveryRate.toFixed(1)}%<br/>` +
-          `急性期比率: ${data.acuteRate.toFixed(1)}%`,
+          `急性期比率: ${data.acuteRate.toFixed(1)}%` +
+          (data.agingRate ? `<br/>高齢化率: ${data.agingRate.toFixed(1)}%` : ""),
         { sticky: true }
       );
     }

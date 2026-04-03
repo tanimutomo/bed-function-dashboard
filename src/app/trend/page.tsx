@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchNationalSummary, fetchPrefectureSummary, PREFECTURE_NAMES, PREFECTURE_LIST } from "@/lib/data";
+import { fetchNationalSummary, fetchPrefectureSummary, fetchPopulation, PREFECTURE_NAMES, PREFECTURE_LIST } from "@/lib/data";
+import type { PopulationData } from "@/lib/data";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { NationalSummary } from "@/types";
 
@@ -9,13 +10,15 @@ export default function TrendPage() {
   const [national, setNational] = useState<NationalSummary[]>([]);
   const [prefData, setPrefData] = useState<Record<string, NationalSummary[]>>({});
   const [selectedPref, setSelectedPref] = useState<string>("all");
+  const [popData, setPopData] = useState<Record<string, PopulationData>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchNationalSummary(), fetchPrefectureSummary()]).then(
-      ([nat, pref]) => {
+    Promise.all([fetchNationalSummary(), fetchPrefectureSummary(), fetchPopulation()]).then(
+      ([nat, pref, pop]) => {
         setNational(nat);
         setPrefData(pref);
+        setPopData(pop.prefectures);
         setLoading(false);
       }
     );
@@ -87,37 +90,73 @@ export default function TrendPage() {
       </div>
 
       {/* KPI */}
-      {latest && (
-        <div className="mb-8 grid gap-4 sm:grid-cols-4">
-          <KpiCard
-            label="総病床数"
-            value={latest.totalBeds}
-            unit="床"
-            description={`${latest.year}年度`}
-          />
-          <KpiCard
-            label="回復期病床数"
-            value={latest.bedsByFunction.recovery}
-            unit="床"
-          />
-          <KpiCard
-            label="回復期変化率"
-            value={recoveryChange}
-            unit="%"
-            description={
-              displayData.length > 1
-                ? `${earliest?.year}→${latest.year}`
-                : "経年データなし"
-            }
-          />
-          <KpiCard
-            label="急性期変化率"
-            value={acuteChange}
-            unit="%"
-            description="高度急性期+急性期"
-          />
-        </div>
-      )}
+      {latest && (() => {
+        const pop = selectedPref === "all"
+          ? Object.values(popData).reduce(
+              (acc, p) => ({
+                totalPopulation: acc.totalPopulation + p.totalPopulation,
+                population65over: acc.population65over + p.population65over,
+                agingRate: 0,
+              }),
+              { totalPopulation: 0, population65over: 0, agingRate: 0 }
+            )
+          : popData[selectedPref];
+        const agingRate = pop
+          ? pop.agingRate || (pop.totalPopulation > 0 ? Math.round(pop.population65over / pop.totalPopulation * 1000) / 10 : 0)
+          : null;
+        const bedsPerCapita = pop && pop.totalPopulation > 0
+          ? Math.round(latest.totalBeds / pop.totalPopulation * 10000 * 10) / 10
+          : null;
+        return (
+          <div className="mb-8 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
+            <KpiCard
+              label="総病床数"
+              value={latest.totalBeds}
+              unit="床"
+              description={`${latest.year}年度`}
+            />
+            <KpiCard
+              label="回復期変化率"
+              value={recoveryChange}
+              unit="%"
+              description={
+                displayData.length > 1
+                  ? `${earliest?.year}→${latest.year}`
+                  : "経年データなし"
+              }
+            />
+            <KpiCard
+              label="急性期変化率"
+              value={acuteChange}
+              unit="%"
+              description="高度急性期+急性期"
+            />
+            {pop && (
+              <KpiCard
+                label="人口"
+                value={pop.totalPopulation}
+                unit="人"
+                description="2020年国勢調査"
+              />
+            )}
+            {agingRate != null && (
+              <KpiCard
+                label="高齢化率"
+                value={agingRate}
+                unit="%"
+                description="65歳以上"
+              />
+            )}
+            {bedsPerCapita != null && (
+              <KpiCard
+                label="人口1万人あたり病床数"
+                value={bedsPerCapita}
+                unit="床"
+              />
+            )}
+          </div>
+        );
+      })()}
 
       {/* トレンドテーブル */}
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
