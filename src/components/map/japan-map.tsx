@@ -37,13 +37,13 @@ function getColor(value: number, metric: ColorMetric): string {
     if (value >= 45) return "#22c55e";
     return "#15803d";
   } else {
-    // 高齢化率: 実データ範囲 約22%〜37%
-    if (value >= 35) return "#7c3aed";
-    if (value >= 32) return "#8b5cf6";
-    if (value >= 29) return "#a78bfa";
-    if (value >= 26) return "#c4b5fd";
-    if (value >= 23) return "#ddd6fe";
-    return "#ede9fe";
+    // 高齢化率: 実データ範囲 約22%〜37%（高い＝赤、低い＝緑）
+    if (value >= 35) return "#ef4444";
+    if (value >= 32) return "#fb923c";
+    if (value >= 29) return "#fde047";
+    if (value >= 26) return "#86efac";
+    if (value >= 23) return "#22c55e";
+    return "#15803d";
   }
 }
 

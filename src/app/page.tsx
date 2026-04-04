@@ -203,7 +203,7 @@ export default function HomePage() {
               onClick={() => setMapMetric("agingRate")}
               className={`rounded-full px-3 py-1 text-xs font-medium ${
                 mapMetric === "agingRate"
-                  ? "bg-purple-600 text-white"
+                  ? "bg-orange-600 text-white"
                   : "bg-gray-100 text-gray-700"
               }`}
             >
@@ -237,7 +237,7 @@ export default function HomePage() {
               <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#fde047" }} />
               <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#fb923c" }} />
               <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#ef4444" }} />
-              <span>高い（過剰）</span>
+              <span>高い{mapMetric === "acuteRate" ? "（過剰）" : ""}</span>
             </>
           )}
         </div>
