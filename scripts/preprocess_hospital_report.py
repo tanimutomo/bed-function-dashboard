@@ -32,6 +32,7 @@ PREF_NAME_TO_CODE = {
 
 # ファイルと年度のマッピング
 FILE_CONFIGS = [
+    # R6: 介護療養病床が廃止されたため列数が少ない（16列）
     {
         "file": "byouintoukei_r6_2024.xlsx",
         "year": "2024",
@@ -54,6 +55,7 @@ FILE_CONFIGS = [
             "general_stay": 15,
         },
     },
+    # R3-R5: 介護療養病床列あり（col 10=介護療養利用率, col 17=介護療養在院日数）→ 19列
     {
         "file": "byouintoukei_r5_2023.xlsx",
         "year": "2023",
@@ -68,12 +70,13 @@ FILE_CONFIGS = [
             "tb_util": 7,
             "therapy_util": 8,
             "general_util": 9,
-            "total_stay": 10,
-            "psychiatric_stay": 11,
-            "infectious_stay": 12,
-            "tb_stay": 13,
-            "therapy_stay": 14,
-            "general_stay": 15,
+            # col 10 = 介護療養病床利用率（スキップ）
+            "total_stay": 11,
+            "psychiatric_stay": 12,
+            "infectious_stay": 13,
+            "tb_stay": 14,
+            "therapy_stay": 15,
+            "general_stay": 16,
         },
     },
     {
@@ -90,12 +93,12 @@ FILE_CONFIGS = [
             "tb_util": 7,
             "therapy_util": 8,
             "general_util": 9,
-            "total_stay": 10,
-            "psychiatric_stay": 11,
-            "infectious_stay": 12,
-            "tb_stay": 13,
-            "therapy_stay": 14,
-            "general_stay": 15,
+            "total_stay": 11,
+            "psychiatric_stay": 12,
+            "infectious_stay": 13,
+            "tb_stay": 14,
+            "therapy_stay": 15,
+            "general_stay": 16,
         },
     },
     {
@@ -112,12 +115,12 @@ FILE_CONFIGS = [
             "tb_util": 7,
             "therapy_util": 8,
             "general_util": 9,
-            "total_stay": 10,
-            "psychiatric_stay": 11,
-            "infectious_stay": 12,
-            "tb_stay": 13,
-            "therapy_stay": 14,
-            "general_stay": 15,
+            "total_stay": 11,
+            "psychiatric_stay": 12,
+            "infectious_stay": 13,
+            "tb_stay": 14,
+            "therapy_stay": 15,
+            "general_stay": 16,
         },
     },
 ]

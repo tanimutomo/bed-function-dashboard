@@ -91,7 +91,35 @@ export default function TrendPage() {
         </select>
       </div>
 
-      {/* KPI */}
+      {/* KPI: 病床データ */}
+      {latest && (
+        <div className="mb-4 grid gap-4 sm:grid-cols-3">
+          <KpiCard
+            label="総病床数"
+            value={latest.totalBeds}
+            unit="床"
+            description={`${latest.year}年度`}
+          />
+          <KpiCard
+            label="回復期変化率"
+            value={recoveryChange}
+            unit="%"
+            description={
+              displayData.length > 1
+                ? `${earliest?.year}→${latest.year}`
+                : "経年データなし"
+            }
+          />
+          <KpiCard
+            label="急性期変化率"
+            value={acuteChange}
+            unit="%"
+            description="高度急性期+急性期"
+          />
+        </div>
+      )}
+
+      {/* KPI: 人口・地域データ */}
       {latest && (() => {
         const pop = selectedPref === "all"
           ? Object.values(popData).reduce(
@@ -109,38 +137,15 @@ export default function TrendPage() {
         const bedsPerCapita = pop && pop.totalPopulation > 0
           ? Math.round(latest.totalBeds / pop.totalPopulation * 10000 * 10) / 10
           : null;
+        if (!pop) return null;
         return (
-          <div className="mb-8 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="mb-8 grid gap-4 sm:grid-cols-3">
             <KpiCard
-              label="総病床数"
-              value={latest.totalBeds}
-              unit="床"
-              description={`${latest.year}年度`}
+              label="人口"
+              value={pop.totalPopulation}
+              unit="人"
+              description="2020年国勢調査"
             />
-            <KpiCard
-              label="回復期変化率"
-              value={recoveryChange}
-              unit="%"
-              description={
-                displayData.length > 1
-                  ? `${earliest?.year}→${latest.year}`
-                  : "経年データなし"
-              }
-            />
-            <KpiCard
-              label="急性期変化率"
-              value={acuteChange}
-              unit="%"
-              description="高度急性期+急性期"
-            />
-            {pop && (
-              <KpiCard
-                label="人口"
-                value={pop.totalPopulation}
-                unit="人"
-                description="2020年国勢調査"
-              />
-            )}
             {agingRate != null && (
               <KpiCard
                 label="高齢化率"
