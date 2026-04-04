@@ -61,6 +61,8 @@ Y1_COLS = {
     # 入院患者数
     "new_admissions_annual": 65,
     "planned_admissions_annual": 78,
+    # 在棟患者延べ数（病床利用率計算用）
+    "inpatient_days_annual": 117,
 }
 
 # R6ではカラム構成が変更（介護療養病床関連列が削除されて左に6列シフト）
@@ -86,6 +88,8 @@ Y1_COLS_R6 = {
     # 入院患者数
     "new_admissions_annual": 58,
     "planned_admissions_annual": 71,
+    # 在棟患者延べ数（病床利用率計算用）
+    "inpatient_days_annual": 110,
 }
 
 # 様式2年間合計のカラムインデックス（R3-R5）
@@ -295,6 +299,8 @@ def process_year(year: str) -> dict:
         "nurses": 0,
         "newAdmissions": 0,
         "plannedAdmissions": 0,
+        "inpatientDays": 0,
+        "maxBeds": 0,
         "surgeries": 0,
         "surgeriesGA": 0,
         "heartLungSurgery": 0,
@@ -343,6 +349,12 @@ def process_year(year: str) -> dict:
         # 入院患者数
         h["newAdmissions"] += safe_int(row.iloc[y1_cols["new_admissions_annual"]])
         h["plannedAdmissions"] += safe_int(row.iloc[y1_cols["planned_admissions_annual"]])
+
+        # 在棟患者延べ数・最大使用病床数（病床利用率計算用）
+        h["inpatientDays"] += safe_int(row.iloc[y1_cols["inpatient_days_annual"]])
+        general_max = safe_int(row.iloc[y1_cols["general_beds_max"]])
+        therapy_max = safe_int(row.iloc[y1_cols["therapy_beds_max"]])
+        h["maxBeds"] += (general_max + therapy_max) if (general_max + therapy_max) > 0 else ward_beds
 
         # 様式2からの診療実績（ward_keyで正規化してマッチング）
         raw_ward_code = safe_str(row.iloc[y1_cols["ward_code"]])
@@ -510,6 +522,9 @@ def generate_outputs(all_years_data: dict):
                 }
 
             # 構想区域別データ
+            area_util = None
+            if h["inpatientDays"] > 0 and h["maxBeds"] > 0:
+                area_util = round(h["inpatientDays"] / (h["maxBeds"] * 365) * 100, 1)
             area_data[h["areaCode"]][fiscal_year].append({
                 "code": code,
                 "name": h["name"],
@@ -520,6 +535,7 @@ def generate_outputs(all_years_data: dict):
                 "chemotherapy": h["chemotherapy"],
                 "radiotherapy": h["radiotherapy"],
                 "tpa": h["tpa"],
+                "bedUtilizationRate": area_util,
             })
 
             # 都道府県別集計
@@ -646,6 +662,11 @@ def generate_outputs(all_years_data: dict):
                 }
 
             hosp_data["name"] = h["name"]  # 最新名称で更新
+            # 病床利用率の計算
+            bed_utilization = None
+            if h["inpatientDays"] > 0 and h["maxBeds"] > 0:
+                bed_utilization = round(h["inpatientDays"] / (h["maxBeds"] * 365) * 100, 1)
+
             hosp_data["yearlyData"][fiscal_year] = {
                 "totalBeds": h["totalBeds"],
                 "bedsByFunction": h["bedsByFunction"],
@@ -653,6 +674,9 @@ def generate_outputs(all_years_data: dict):
                 "nurses": h["nurses"],
                 "newAdmissions": h["newAdmissions"],
                 "plannedAdmissions": h["plannedAdmissions"],
+                "inpatientDays": h["inpatientDays"],
+                "maxBeds": h["maxBeds"],
+                "bedUtilizationRate": bed_utilization,
                 "surgeries": h["surgeries"],
                 "surgeriesGA": h["surgeriesGA"],
                 "heartLungSurgery": h["heartLungSurgery"],

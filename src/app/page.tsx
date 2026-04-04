@@ -5,8 +5,8 @@ import dynamic from "next/dynamic";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { FunctionBarChart } from "@/components/charts/function-bar-chart";
 import { FunctionPieChart } from "@/components/charts/function-pie-chart";
-import { fetchNationalSummary, fetchPrefectureSummary, fetchPopulation, PREFECTURE_NAMES } from "@/lib/data";
-import type { PopulationData } from "@/lib/data";
+import { fetchNationalSummary, fetchPrefectureSummary, fetchPopulation, fetchHospitalReport, PREFECTURE_NAMES } from "@/lib/data";
+import type { PopulationData, HospitalReportEntry } from "@/lib/data";
 import type { NationalSummary, FunctionType } from "@/types";
 import { FUNCTION_LABELS, FUNCTION_COLORS } from "@/types";
 
@@ -23,16 +23,18 @@ export default function HomePage() {
   const [national, setNational] = useState<NationalSummary[]>([]);
   const [prefData, setPrefData] = useState<Record<string, NationalSummary[]>>({});
   const [selectedYear, setSelectedYear] = useState<string>("");
-  const [mapMetric, setMapMetric] = useState<"recoveryRate" | "acuteRate" | "agingRate">("recoveryRate");
+  const [mapMetric, setMapMetric] = useState<"recoveryRate" | "acuteRate" | "agingRate" | "utilizationRate">("recoveryRate");
   const [popData, setPopData] = useState<Record<string, PopulationData>>({});
+  const [hospReport, setHospReport] = useState<Record<string, { national: HospitalReportEntry; prefectures: Record<string, HospitalReportEntry> }>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchNationalSummary(), fetchPrefectureSummary(), fetchPopulation()]).then(
-      ([nat, pref, pop]) => {
+    Promise.all([fetchNationalSummary(), fetchPrefectureSummary(), fetchPopulation(), fetchHospitalReport()]).then(
+      ([nat, pref, pop, hr]) => {
         setNational(nat);
         setPrefData(pref);
         setPopData(pop.prefectures);
+        setHospReport(hr.years);
         // 病床機能データがある最新年度をデフォルトに
         const validYears = nat.filter(
           (d) => d.totalBeds > 0 && Object.values(d.bedsByFunction).some((v) => v > 0)
@@ -47,22 +49,29 @@ export default function HomePage() {
 
   // 地図用の都道府県データ（hookはearly returnの前に配置）
   const mapPrefData = useMemo(() => {
-    const result: Record<string, { totalBeds: number; recoveryRate: number; acuteRate: number; agingRate: number }> = {};
+    const result: Record<string, { totalBeds: number; recoveryRate: number; acuteRate: number; agingRate: number; utilizationRate: number }> = {};
+    // 病院報告から利用率を取得（選択年度に近い年のデータ）
+    const hrYears = Object.keys(hospReport).sort();
+    const hrYear = hrYears.find(y => y === selectedYear) || hrYears[hrYears.length - 1];
+    const hrData = hrYear ? hospReport[hrYear]?.prefectures : {};
+
     Object.entries(prefData).forEach(([code, years]) => {
       const yearData = years.find((y) => y.year === selectedYear) || years[years.length - 1];
       if (!yearData || yearData.totalBeds === 0) return;
       const total = yearData.totalBeds;
       const pop = popData[code];
+      const hr = hrData?.[code];
       result[code] = {
         totalBeds: total,
         recoveryRate: (yearData.bedsByFunction.recovery / total) * 100,
         acuteRate:
           ((yearData.bedsByFunction.high_acute + yearData.bedsByFunction.acute) / total) * 100,
         agingRate: pop ? pop.agingRate : 0,
+        utilizationRate: hr?.totalUtilization ?? 0,
       };
     });
     return result;
-  }, [prefData, selectedYear, popData]);
+  }, [prefData, selectedYear, popData, hospReport]);
 
   if (loading) {
     return (
@@ -209,6 +218,16 @@ export default function HomePage() {
             >
               高齢化率
             </button>
+            <button
+              onClick={() => setMapMetric("utilizationRate")}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                mapMetric === "utilizationRate"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700"
+              }`}
+            >
+              病床利用率
+            </button>
           </div>
         </div>
         <JapanMap
@@ -217,7 +236,7 @@ export default function HomePage() {
           colorMetric={mapMetric}
         />
         <div className="mt-3 flex items-center justify-center gap-1 text-xs text-gray-500">
-          {mapMetric === "recoveryRate" ? (
+          {mapMetric === "recoveryRate" || mapMetric === "utilizationRate" ? (
             <>
               <span>低い</span>
               <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#ef4444" }} />

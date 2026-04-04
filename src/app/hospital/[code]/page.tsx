@@ -42,6 +42,9 @@ interface HospitalYearData {
   tpa: number;
   dialysis: number;
   rehab: number;
+  inpatientDays?: number;
+  maxBeds?: number;
+  bedUtilizationRate?: number | null;
   wards: {
     wardName: string;
     functionType: string;
@@ -191,6 +194,7 @@ export default function HospitalDetailPage() {
         return {
           year: y,
           ...d.bedsByFunction,
+          bedUtilizationRate: d.bedUtilizationRate,
         };
       });
   }, [detail, sortedYears]);
@@ -399,11 +403,19 @@ export default function HospitalDetailPage() {
         <p className="mt-1 text-sm text-gray-500">
           {PREFECTURE_NAMES[detail.prefecture]} / {detail.areaName}構想区域
         </p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-5">
+        <div className="mt-4 grid gap-4 sm:grid-cols-6">
           <div>
             <p className="text-xs text-gray-500">総病床数</p>
             <p className="text-lg font-bold">
               {latestData.totalBeds.toLocaleString()}床
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">病床利用率</p>
+            <p className="text-lg font-bold">
+              {latestData.bedUtilizationRate != null
+                ? <>{latestData.bedUtilizationRate}<span className="text-sm font-normal">%</span></>
+                : <span className="text-gray-400">-</span>}
             </p>
           </div>
           <div>

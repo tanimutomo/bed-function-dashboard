@@ -83,6 +83,27 @@ export async function fetchPopulation(): Promise<{
   return { censusYear: data.censusYear, prefectures: normalized };
 }
 
+export interface HospitalReportEntry {
+  totalUtilization: number | null;
+  generalUtilization: number | null;
+  therapyUtilization: number | null;
+  psychiatricUtilization: number | null;
+  totalAvgStay: number | null;
+  generalAvgStay: number | null;
+  therapyAvgStay: number | null;
+}
+
+export async function fetchHospitalReport(): Promise<{
+  source: string;
+  years: Record<string, {
+    national: HospitalReportEntry;
+    prefectures: Record<string, HospitalReportEntry>;
+  }>;
+}> {
+  const res = await fetch(`${BASE_PATH}/summary/hospital_report.json`);
+  return res.json();
+}
+
 export async function fetchPopulationAreas(): Promise<{
   censusYear: string;
   areas: Record<string, PopulationData>;

@@ -11,9 +11,10 @@ interface PrefectureData {
   recoveryRate: number;
   acuteRate: number;
   agingRate?: number;
+  utilizationRate?: number;
 }
 
-type ColorMetric = "recoveryRate" | "acuteRate" | "agingRate";
+type ColorMetric = "recoveryRate" | "acuteRate" | "agingRate" | "utilizationRate";
 
 interface JapanMapProps {
   prefectureData: Record<string, PrefectureData>;
@@ -36,7 +37,7 @@ function getColor(value: number, metric: ColorMetric): string {
     if (value >= 50) return "#86efac";
     if (value >= 45) return "#22c55e";
     return "#15803d";
-  } else {
+  } else if (metric === "agingRate") {
     // 高齢化率: 実データ範囲 約22%〜37%（高い＝赤、低い＝緑）
     if (value >= 35) return "#ef4444";
     if (value >= 32) return "#fb923c";
@@ -44,6 +45,14 @@ function getColor(value: number, metric: ColorMetric): string {
     if (value >= 26) return "#86efac";
     if (value >= 23) return "#22c55e";
     return "#15803d";
+  } else {
+    // 病床利用率: 実データ範囲 約66%〜83%（高い＝緑、低い＝赤）
+    if (value >= 82) return "#15803d";
+    if (value >= 79) return "#22c55e";
+    if (value >= 76) return "#86efac";
+    if (value >= 73) return "#fde047";
+    if (value >= 70) return "#fb923c";
+    return "#ef4444";
   }
 }
 
@@ -98,7 +107,8 @@ export default function JapanMap({
           `総病床数: ${data.totalBeds.toLocaleString()}<br/>` +
           `回復期比率: ${data.recoveryRate.toFixed(1)}%<br/>` +
           `急性期比率: ${data.acuteRate.toFixed(1)}%` +
-          (data.agingRate ? `<br/>高齢化率: ${data.agingRate.toFixed(1)}%` : ""),
+          (data.agingRate ? `<br/>高齢化率: ${data.agingRate.toFixed(1)}%` : "") +
+          (data.utilizationRate ? `<br/>病床利用率: ${data.utilizationRate.toFixed(1)}%` : ""),
         { sticky: true }
       );
     }

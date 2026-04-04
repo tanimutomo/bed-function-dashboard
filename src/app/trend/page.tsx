@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchNationalSummary, fetchPrefectureSummary, fetchPopulation, PREFECTURE_NAMES, PREFECTURE_LIST } from "@/lib/data";
-import type { PopulationData } from "@/lib/data";
+import { fetchNationalSummary, fetchPrefectureSummary, fetchPopulation, fetchHospitalReport, PREFECTURE_NAMES, PREFECTURE_LIST } from "@/lib/data";
+import type { PopulationData, HospitalReportEntry } from "@/lib/data";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { NationalSummary } from "@/types";
 
@@ -11,14 +11,16 @@ export default function TrendPage() {
   const [prefData, setPrefData] = useState<Record<string, NationalSummary[]>>({});
   const [selectedPref, setSelectedPref] = useState<string>("all");
   const [popData, setPopData] = useState<Record<string, PopulationData>>({});
+  const [hospReport, setHospReport] = useState<Record<string, { national: HospitalReportEntry; prefectures: Record<string, HospitalReportEntry> }>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchNationalSummary(), fetchPrefectureSummary(), fetchPopulation()]).then(
-      ([nat, pref, pop]) => {
+    Promise.all([fetchNationalSummary(), fetchPrefectureSummary(), fetchPopulation(), fetchHospitalReport()]).then(
+      ([nat, pref, pop, hr]) => {
         setNational(nat);
         setPrefData(pref);
         setPopData(pop.prefectures);
+        setHospReport(hr.years);
         setLoading(false);
       }
     );
@@ -223,6 +225,68 @@ export default function TrendPage() {
           ※ 一部の病院で令和4年度（2022）と令和6年度（2024）の報告値が同一となるケースが確認されています。これは厚生労働省が公開する元データに起因するもので、本ダッシュボードでの加工によるものではありません。
         </p>
       </div>
+
+      {/* 病床利用率（病院報告） */}
+      {Object.keys(hospReport).length > 0 && (
+        <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-1 text-lg font-semibold">
+            病床利用率・平均在院日数の推移
+            {selectedPref !== "all" &&
+              ` - ${PREFECTURE_NAMES[selectedPref]}`}
+          </h2>
+          <p className="mb-4 text-xs text-gray-400">
+            出典: 厚生労働省「病院報告」（都道府県別）
+          </p>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-gray-500">
+                  <th className="py-2 pr-4">年</th>
+                  <th className="py-2 pr-4 text-right">病床利用率（全体）</th>
+                  <th className="py-2 pr-4 text-right">一般病床</th>
+                  <th className="py-2 pr-4 text-right">療養病床</th>
+                  <th className="py-2 pr-4 text-right">精神病床</th>
+                  <th className="py-2 pr-4 text-right">平均在院日数（全体）</th>
+                  <th className="py-2 text-right">一般病床</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(hospReport)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([year, data]) => {
+                    const entry = selectedPref === "all"
+                      ? data.national
+                      : data.prefectures[selectedPref];
+                    if (!entry) return null;
+                    return (
+                      <tr key={year} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-2 pr-4 font-medium">{year}年</td>
+                        <td className="py-2 pr-4 text-right">
+                          {entry.totalUtilization != null ? `${entry.totalUtilization}%` : "-"}
+                        </td>
+                        <td className="py-2 pr-4 text-right">
+                          {entry.generalUtilization != null ? `${entry.generalUtilization}%` : "-"}
+                        </td>
+                        <td className="py-2 pr-4 text-right">
+                          {entry.therapyUtilization != null ? `${entry.therapyUtilization}%` : "-"}
+                        </td>
+                        <td className="py-2 pr-4 text-right">
+                          {entry.psychiatricUtilization != null ? `${entry.psychiatricUtilization}%` : "-"}
+                        </td>
+                        <td className="py-2 pr-4 text-right">
+                          {entry.totalAvgStay != null ? `${entry.totalAvgStay}日` : "-"}
+                        </td>
+                        <td className="py-2 text-right">
+                          {entry.generalAvgStay != null ? `${entry.generalAvgStay}日` : "-"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
     </div>
   );
