@@ -450,9 +450,16 @@ def load_iryo_info() -> dict:
             infectious = int(row[63]) if row[63] else 0
             total = int(row[64]) if row[64] else 0
 
+            address = row[9].strip() if len(row) > 9 else ""
+            lat = float(row[10]) if len(row) > 10 and row[10] else 0
+            lng = float(row[11]) if len(row) > 11 and row[11] else 0
+
             data = {
                 "name": name,
                 "pref": pref,
+                "address": address,
+                "lat": lat if lat > 0 else None,
+                "lng": lng if lng > 0 else None,
                 "generalBeds": general,
                 "therapyBeds": therapy,
                 "psychiatricBeds": psychiatric,
@@ -633,6 +640,11 @@ def generate_outputs(all_years_data: dict):
             iryo_match = match_iryo_info(h["name"], h["prefCode"], iryo_exact, iryo_norm)
             psychiatric_beds = iryo_match["psychiatricBeds"] if iryo_match else 0
 
+            # 座標・住所情報
+            address = iryo_match["address"] if iryo_match else ""
+            lat = iryo_match["lat"] if iryo_match else None
+            lng = iryo_match["lng"] if iryo_match else None
+
             # 病院マスタに追加（最新年度の情報で上書き）
             hospital_index_map[code] = {
                 "code": code,
@@ -644,6 +656,9 @@ def generate_outputs(all_years_data: dict):
                 "bedsByFunction": dict(h["bedsByFunction"]),
                 "recoveryRelatedBeds": h["recoveryRelatedBeds"],
                 "psychiatricBeds": psychiatric_beds,
+                "address": address,
+                "lat": lat,
+                "lng": lng,
             }
 
             # 病院個別JSON（年度ごとにマージ）
@@ -662,6 +677,11 @@ def generate_outputs(all_years_data: dict):
                 }
 
             hosp_data["name"] = h["name"]  # 最新名称で更新
+            if address:
+                hosp_data["address"] = address
+            if lat and lng:
+                hosp_data["lat"] = lat
+                hosp_data["lng"] = lng
             # 病床利用率の計算
             bed_utilization = None
             if h["inpatientDays"] > 0 and h["maxBeds"] > 0:

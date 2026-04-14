@@ -27,6 +27,8 @@ import {
 import { fetchHospitalDetail, fetchAreaDetail, fetchHospitalIndex, PREFECTURE_NAMES } from "@/lib/data";
 import { FUNCTION_LABELS, FUNCTION_COLORS } from "@/types";
 import type { FunctionType } from "@/types";
+import HospitalMap from "@/components/map/hospital-map";
+import type { HospitalMapItem } from "@/components/map/hospital-map";
 
 interface HospitalYearData {
   totalBeds: number;
@@ -60,6 +62,9 @@ interface HospitalDetailData {
   areaCode: string;
   areaName: string;
   prefecture: string;
+  lat?: number;
+  lng?: number;
+  address?: string;
   yearlyData: Record<string, HospitalYearData>;
 }
 
@@ -91,7 +96,7 @@ export default function HospitalDetailPage() {
   const [detail, setDetail] = useState<HospitalDetailData | null>(null);
   const [areaDetail, setAreaDetail] = useState<AreaDetailData | null>(null);
   const [areaHospitalsFromIndex, setAreaHospitalsFromIndex] = useState<
-    { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number> }[]
+    { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number>; lat?: number; lng?: number }[]
   >([]);
   const [loading, setLoading] = useState(true);
 
@@ -114,11 +119,13 @@ export default function HospitalDetailPage() {
             const indexAreaCode = selfInIndex?.areaCode || d.areaCode;
             const sameArea = idx
               .filter((h: { areaCode: string }) => h.areaCode === indexAreaCode)
-              .map((h: { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number> }) => ({
+              .map((h: { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number>; lat?: number; lng?: number }) => ({
                 code: h.code,
                 name: h.name,
                 totalBeds: h.totalBeds,
                 bedsByFunction: h.bedsByFunction,
+                lat: h.lat,
+                lng: h.lng,
               }));
             setAreaHospitalsFromIndex(sameArea);
           });
@@ -214,7 +221,7 @@ export default function HospitalDetailPage() {
     return yearWithBf || areaYears[areaYears.length - 1];
   }, [areaDetail]);
 
-  // ===== 1. 競合ポジショニングマップ =====
+  // ===== 1. 周辺病院ポジショニングマップ =====
   const positioningData = useMemo(() => {
     // エリアデータからbfが有効か確認
     let sourceHospitals: { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number> }[] = [];
@@ -266,6 +273,45 @@ export default function HospitalDetailPage() {
     const self = hospitals.find((h) => h.isSelf) || null;
     return { hospitals, self, dataSource };
   }, [areaDetail, areaLatestYear, code, areaHospitalsFromIndex]);
+
+  // ===== 地図表示用データ =====
+  const mapHospitals = useMemo((): HospitalMapItem[] => {
+    // 自院の座標
+    const selfLat = detail?.lat;
+    const selfLng = detail?.lng;
+
+    // 周辺病院の座標はインデックスから取得
+    const items: HospitalMapItem[] = [];
+
+    for (const h of areaHospitalsFromIndex) {
+      const lat = h.code === code ? selfLat : h.lat;
+      const lng = h.code === code ? selfLng : h.lng;
+      if (lat && lng && lat > 0 && lng > 0) {
+        items.push({
+          code: h.code,
+          name: h.name,
+          lat,
+          lng,
+          totalBeds: h.totalBeds,
+          isSelf: h.code === code,
+        });
+      }
+    }
+
+    // 自院がインデックスに含まれていない場合
+    if (selfLat && selfLng && selfLat > 0 && selfLng > 0 && !items.some((i) => i.code === code)) {
+      items.push({
+        code,
+        name: detail?.name || "",
+        lat: selfLat,
+        lng: selfLng,
+        totalBeds: latestData?.totalBeds || 0,
+        isSelf: true,
+      });
+    }
+
+    return items;
+  }, [detail, areaHospitalsFromIndex, code, latestData]);
 
   // ===== 2. 地域シェア分析 =====
   const shareData = useMemo(() => {
@@ -539,11 +585,11 @@ export default function HospitalDetailPage() {
         </div>
       </div>
 
-      {/* ===== 競合ポジショニングマップ ===== */}
+      {/* ===== 周辺病院ポジショニングマップ ===== */}
       {positioningData.hospitals.length > 1 && (
         <div className="mt-6 rounded-lg border border-blue-200 bg-white p-6 shadow-sm">
           <h3 className="mb-1 text-lg font-semibold">
-            競合ポジショニングマップ
+            周辺病院ポジショニングマップ
           </h3>
           <p className="mb-4 text-xs text-gray-400">
             {detail.areaName}構想区域内の全{positioningData.hospitals.length}病院　|　X軸: 急性期比率　Y軸: 回復期比率　バブルサイズ: 総病床数
@@ -612,6 +658,17 @@ export default function HospitalDetailPage() {
               </span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ===== 周辺病院マップ ===== */}
+      {mapHospitals.length > 1 && (
+        <div className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-1 text-lg font-semibold">周辺病院マップ</h3>
+          <p className="mb-4 text-xs text-gray-400">
+            {detail.areaName}構想区域内の{mapHospitals.length}病院（青 = 当院、灰色 = 他院）
+          </p>
+          <HospitalMap hospitals={mapHospitals} selfCode={code} />
         </div>
       )}
 
