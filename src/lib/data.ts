@@ -32,7 +32,7 @@ export async function fetchAreaDetail(areaCode: string) {
 }
 
 export async function fetchHospitalIndex(): Promise<
-  { code: string; name: string; areaCode: string; areaName: string; prefecture: string; totalBeds: number; bedsByFunction: Record<string, number>; recoveryRelatedBeds: number; psychiatricBeds: number }[]
+  { code: string; name: string; areaCode: string; areaName: string; prefecture: string; totalBeds: number; bedsByFunction: Record<string, number>; recoveryRelatedBeds: number; psychiatricBeds: number; lat?: number; lng?: number }[]
 > {
   const res = await fetch(`${BASE_PATH}/hospitals/index.json`);
   const data = await res.json();

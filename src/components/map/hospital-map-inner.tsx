@@ -15,10 +15,10 @@ const selfIcon = new L.DivIcon({
   popupAnchor: [0, -10],
 });
 
-// 他院用マーカー（グレー）
+// 他院用マーカー（薄い青）
 const otherIcon = new L.DivIcon({
   className: "",
-  html: `<div style="width:12px;height:12px;background:#94a3b8;border:2px solid #cbd5e1;border-radius:50%;"></div>`,
+  html: `<div style="width:12px;height:12px;background:#93c5fd;border:2px solid #60a5fa;border-radius:50%;"></div>`,
   iconSize: [12, 12],
   iconAnchor: [6, 6],
   popupAnchor: [0, -8],

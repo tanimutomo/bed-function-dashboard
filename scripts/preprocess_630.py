@@ -149,6 +149,24 @@ def parse_facility_overview(shisetu_file):
             "permittedBeds": safe_int(df.iloc[row_idx, 7]),
             "inpatients": safe_int(df.iloc[row_idx, 10]),
             "protectionRooms": safe_int(df.iloc[row_idx, 12]),
+            # 職員数
+            "psychiatrists_ft": safe_int(df.iloc[row_idx, 15]),       # 精神科医師（常勤）
+            "psychiatrists_pt": safe_int(df.iloc[row_idx, 16]),       # 精神科医師（非常勤）
+            "designated_psychiatrists_ft": safe_int(df.iloc[row_idx, 17]),  # 精神保健指定医（常勤）
+            "nurses_ft": safe_int(df.iloc[row_idx, 21]),              # 看護師（常勤）
+            "nurses_pt": safe_int(df.iloc[row_idx, 22]),              # 看護師（非常勤）
+            "asst_nurses_ft": safe_int(df.iloc[row_idx, 31]),        # 准看護師（常勤）
+            "asst_nurses_pt": safe_int(df.iloc[row_idx, 32]),        # 准看護師（非常勤）
+            "nurse_aides_ft": safe_int(df.iloc[row_idx, 33]),        # 看護補助者（常勤）
+            "nurse_aides_pt": safe_int(df.iloc[row_idx, 34]),        # 看護補助者（非常勤）
+            "pt_ft": safe_int(df.iloc[row_idx, 35]),                  # 理学療法士（常勤）
+            "pt_pt": safe_int(df.iloc[row_idx, 36]),                  # 理学療法士（非常勤）
+            "ot_ft": safe_int(df.iloc[row_idx, 39]),                  # 作業療法士（常勤）
+            "ot_pt": safe_int(df.iloc[row_idx, 40]),                  # 作業療法士（非常勤）
+            "psw_ft": safe_int(df.iloc[row_idx, 43]),                 # 精神保健福祉士（常勤）
+            "psw_pt": safe_int(df.iloc[row_idx, 44]),                 # 精神保健福祉士（非常勤）
+            "psychologists_ft": safe_int(df.iloc[row_idx, 47]),       # 臨床心理技術者（常勤）
+            "psychologists_pt": safe_int(df.iloc[row_idx, 48]),       # 臨床心理技術者（非常勤）
             "medicalProtectionPatients": safe_int(df.iloc[row_idx, 62]),
             "involuntaryPatients": safe_int(df.iloc[row_idx, 63]),
         }

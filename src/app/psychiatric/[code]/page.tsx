@@ -16,7 +16,36 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
-import { fetchHospitalDetail, fetch630Summary, PREFECTURE_NAMES } from "@/lib/data";
+import { fetchHospitalDetail, fetch630Summary, fetchHospitalIndex, PREFECTURE_NAMES } from "@/lib/data";
+import HospitalMap from "@/components/map/hospital-map";
+import type { HospitalMapItem } from "@/components/map/hospital-map";
+
+interface FacilityData {
+  hospitals: number;
+  beds: number;
+  permittedBeds: number;
+  inpatients: number;
+  protectionRooms: number;
+  psychiatrists_ft: number;
+  psychiatrists_pt: number;
+  designated_psychiatrists_ft: number;
+  nurses_ft: number;
+  nurses_pt: number;
+  asst_nurses_ft: number;
+  asst_nurses_pt: number;
+  nurse_aides_ft: number;
+  nurse_aides_pt: number;
+  pt_ft: number;
+  pt_pt: number;
+  ot_ft: number;
+  ot_pt: number;
+  psw_ft: number;
+  psw_pt: number;
+  psychologists_ft: number;
+  psychologists_pt: number;
+  medicalProtectionPatients: number;
+  involuntaryPatients: number;
+}
 
 interface PrefData {
   prefCode: string;
@@ -25,8 +54,20 @@ interface PrefData {
   admissionTypes: { involuntary: number; medicalProtection: number; voluntary: number; total: number; openWard: number; closedWard: number };
   diseases: Record<string, number>;
   lengthOfStay: { under3months: number; months3to12: number; over1year: number; under3months_u65: number; under3months_o65: number; months3to12_u65: number; months3to12_o65: number; over1year_u65: number; over1year_o65: number };
-  facility?: { protectionRooms: number; involuntaryPatients: number; medicalProtectionPatients: number };
+  facility?: FacilityData;
 }
+
+const STAFF_630_LABELS: [string, string, string][] = [
+  ["精神科医師", "psychiatrists_ft", "psychiatrists_pt"],
+  ["うち精神保健指定医", "designated_psychiatrists_ft", ""],
+  ["看護師", "nurses_ft", "nurses_pt"],
+  ["准看護師", "asst_nurses_ft", "asst_nurses_pt"],
+  ["看護補助者", "nurse_aides_ft", "nurse_aides_pt"],
+  ["理学療法士", "pt_ft", "pt_pt"],
+  ["作業療法士", "ot_ft", "ot_pt"],
+  ["精神保健福祉士", "psw_ft", "psw_pt"],
+  ["臨床心理技術者", "psychologists_ft", "psychologists_pt"],
+];
 
 const DISEASE_LABELS: Record<string, string> = {
   F0_dementia: "認知症 (F0)",
@@ -48,9 +89,14 @@ export default function PsychiatricDetailPage() {
     prefecture: string;
     areaCode: string;
     areaName: string;
+    lat?: number;
+    lng?: number;
     yearlyData: Record<string, { totalBeds: number; psychiatricBeds?: number }>;
   } | null>(null);
   const [prefData, setPrefData] = useState<PrefData | null>(null);
+  const [prefPsychHospitals, setPrefPsychHospitals] = useState<
+    { code: string; name: string; totalBeds: number; lat?: number; lng?: number }[]
+  >([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -58,11 +104,18 @@ export default function PsychiatricDetailPage() {
     Promise.all([
       fetchHospitalDetail(code).catch(() => null),
       fetch630Summary(),
-    ]).then(([d, summary]) => {
+      fetchHospitalIndex(),
+    ]).then(([d, summary, allHospitals]) => {
       setDetail(d);
       if (d?.prefecture) {
         const pref = String(d.prefecture).padStart(2, "0");
         setPrefData(summary.prefectures[pref] || null);
+        // 同じ都道府県の精神科病院を抽出
+        const psych = allHospitals.filter(
+          (h: { prefecture: string; psychiatricBeds?: number }) =>
+            String(h.prefecture).padStart(2, "0") === pref && (h.psychiatricBeds || 0) > 0
+        );
+        setPrefPsychHospitals(psych);
       }
       setLoading(false);
     });
@@ -97,6 +150,20 @@ export default function PsychiatricDetailPage() {
       { period: "1年以上", "65歳未満": l.over1year_u65, "65歳以上": l.over1year_o65 },
     ];
   }, [prefData]);
+
+  // 地図用データ
+  const mapHospitals: HospitalMapItem[] = useMemo(() => {
+    return prefPsychHospitals
+      .filter((h) => h.lat && h.lng)
+      .map((h) => ({
+        code: h.code,
+        name: h.name,
+        lat: h.lat!,
+        lng: h.lng!,
+        totalBeds: h.totalBeds,
+        isSelf: h.code === code,
+      }));
+  }, [prefPsychHospitals, code]);
 
   if (loading) {
     return (
@@ -274,6 +341,100 @@ export default function PsychiatricDetailPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ===== 都道府県内シェア ===== */}
+      {prefData && (
+        <div className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-1 text-lg font-semibold">都道府県内シェア</h3>
+          <p className="mb-4 text-xs text-gray-400">
+            {prefData.prefName}内の精神科医療におけるポジション
+          </p>
+          <div className="grid gap-4 sm:grid-cols-4">
+            <div>
+              <p className="text-xs text-gray-500">精神病床シェア</p>
+              <p className="text-lg font-bold">
+                {prefData.overview.beds > 0
+                  ? ((psychiatricBeds / prefData.overview.beds) * 100).toFixed(2)
+                  : 0}%
+              </p>
+              <p className="text-xs text-gray-400">
+                {psychiatricBeds.toLocaleString()} / {prefData.overview.beds.toLocaleString()}床
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">県内精神科病院数</p>
+              <p className="text-lg font-bold">{prefData.overview.hospitals}施設</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">県内病床利用率</p>
+              <p className="text-lg font-bold">
+                {prefData.facility && prefData.facility.beds > 0
+                  ? ((prefData.facility.inpatients / prefData.facility.beds) * 100).toFixed(1)
+                  : "-"}%
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">保護室・施錠可能個室</p>
+              <p className="text-lg font-bold">
+                {prefData.facility?.protectionRooms.toLocaleString() || "-"}室
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== 職員配置（都道府県） ===== */}
+      {prefData?.facility && (
+        <div className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-1 text-lg font-semibold">精神科医療の職員配置</h3>
+          <p className="mb-4 text-xs text-gray-400">
+            {prefData.prefName}内の精神科病院合計（630調査）
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-xs text-gray-500">
+                  <th className="pb-2 pr-4">職種</th>
+                  <th className="pb-2 pr-4 text-right">常勤</th>
+                  <th className="pb-2 pr-4 text-right">非常勤</th>
+                  <th className="pb-2 text-right">合計</th>
+                </tr>
+              </thead>
+              <tbody>
+                {STAFF_630_LABELS.map(([label, ftKey, ptKey]) => {
+                  const fac = prefData.facility!;
+                  const ft = (fac as unknown as Record<string, number>)[ftKey] || 0;
+                  const pt = ptKey ? (fac as unknown as Record<string, number>)[ptKey] || 0 : 0;
+                  const total = ft + pt;
+                  const isIndent = label.startsWith("うち");
+                  return (
+                    <tr key={ftKey} className="border-b border-gray-100">
+                      <td className={`py-2 pr-4 ${isIndent ? "pl-4 text-gray-500" : "font-medium"}`}>
+                        {label}
+                      </td>
+                      <td className="py-2 pr-4 text-right">{ft.toLocaleString()}</td>
+                      <td className="py-2 pr-4 text-right">{ptKey ? pt.toLocaleString() : "-"}</td>
+                      <td className="py-2 text-right font-semibold">{ptKey ? total.toLocaleString() : "-"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ===== 周辺精神科病院マップ ===== */}
+      {mapHospitals.length > 1 && (
+        <div className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-1 text-lg font-semibold">周辺精神科病院マップ</h3>
+          <p className="mb-4 text-xs text-gray-400">
+            {prefData?.prefName || PREFECTURE_NAMES[detail?.prefecture || ""] || ""}内の精神科病院
+            {mapHospitals.length}施設（濃青 = 当院、薄青 = 他院）
+          </p>
+          <HospitalMap hospitals={mapHospitals} selfCode={code} />
+        </div>
       )}
 
       <p className="mt-6 text-xs text-gray-400">

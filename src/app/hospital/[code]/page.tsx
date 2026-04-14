@@ -30,11 +30,45 @@ import type { FunctionType } from "@/types";
 import HospitalMap from "@/components/map/hospital-map";
 import type { HospitalMapItem } from "@/components/map/hospital-map";
 
+interface StaffEntry {
+  fullTime: number;
+  partTime: number;
+}
+
+interface StaffData {
+  nurses: StaffEntry;
+  asst_nurses: StaffEntry;
+  nurse_aides: StaffEntry;
+  midwives: StaffEntry;
+  pt: StaffEntry;
+  ot: StaffEntry;
+  st: StaffEntry;
+  pharmacists: StaffEntry;
+  clinical_eng: StaffEntry;
+  dietitians: StaffEntry;
+  paramedics: StaffEntry;
+}
+
+const STAFF_LABELS: Record<keyof StaffData, string> = {
+  nurses: "看護師",
+  asst_nurses: "准看護師",
+  nurse_aides: "看護補助者",
+  midwives: "助産師",
+  pt: "理学療法士",
+  ot: "作業療法士",
+  st: "言語聴覚士",
+  pharmacists: "薬剤師",
+  clinical_eng: "臨床工学技士",
+  dietitians: "管理栄養士",
+  paramedics: "救急救命士",
+};
+
 interface HospitalYearData {
   totalBeds: number;
   bedsByFunction: Record<FunctionType, number>;
   futureBedsByFunction: Record<FunctionType, number>;
   nurses: number;
+  staff?: StaffData;
   newAdmissions: number;
   surgeries: number;
   surgeriesGA: number;
@@ -585,6 +619,53 @@ export default function HospitalDetailPage() {
         </div>
       </div>
 
+      {/* ===== 職員構成 ===== */}
+      {clinicalData?.staff && (
+        <div className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-4 text-lg font-semibold">職員構成（病棟部門）</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-xs text-gray-500">
+                  <th className="pb-2 pr-4">職種</th>
+                  <th className="pb-2 pr-4 text-right">常勤</th>
+                  <th className="pb-2 pr-4 text-right">非常勤</th>
+                  <th className="pb-2 text-right">合計</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(Object.keys(STAFF_LABELS) as (keyof StaffData)[]).map((key) => {
+                  const s = clinicalData.staff![key];
+                  const total = s.fullTime + s.partTime;
+                  if (total === 0) return null;
+                  return (
+                    <tr key={key} className="border-b border-gray-100">
+                      <td className="py-2 pr-4 font-medium">{STAFF_LABELS[key]}</td>
+                      <td className="py-2 pr-4 text-right">{s.fullTime.toLocaleString()}</td>
+                      <td className="py-2 pr-4 text-right">{s.partTime.toLocaleString()}</td>
+                      <td className="py-2 text-right font-semibold">{total.toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
+                {(() => {
+                  const staff = clinicalData.staff!;
+                  const totalFT = Object.values(staff).reduce((sum, s) => sum + s.fullTime, 0);
+                  const totalPT = Object.values(staff).reduce((sum, s) => sum + s.partTime, 0);
+                  return (
+                    <tr className="border-t-2 border-gray-300 font-bold">
+                      <td className="py-2 pr-4">合計</td>
+                      <td className="py-2 pr-4 text-right">{totalFT.toLocaleString()}</td>
+                      <td className="py-2 pr-4 text-right">{totalPT.toLocaleString()}</td>
+                      <td className="py-2 text-right">{(totalFT + totalPT).toLocaleString()}</td>
+                    </tr>
+                  );
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* ===== 周辺病院ポジショニングマップ ===== */}
       {positioningData.hospitals.length > 1 && (
         <div className="mt-6 rounded-lg border border-blue-200 bg-white p-6 shadow-sm">
@@ -666,7 +747,7 @@ export default function HospitalDetailPage() {
         <div className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="mb-1 text-lg font-semibold">周辺病院マップ</h3>
           <p className="mb-4 text-xs text-gray-400">
-            {detail.areaName}構想区域内の{mapHospitals.length}病院（青 = 当院、灰色 = 他院）
+            {detail.areaName}構想区域内の{mapHospitals.length}病院（濃青 = 当院、薄青 = 他院）
           </p>
           <HospitalMap hospitals={mapHospitals} selfCode={code} />
         </div>

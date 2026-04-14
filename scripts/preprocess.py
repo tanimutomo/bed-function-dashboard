@@ -55,9 +55,29 @@ Y1_COLS = {
     "therapy_beds_max": 23,
     "admission_fee": 32,
     "admission_fee_beds": 33,
-    # 職員数（常勤）
-    "nurses": 39,       # 看護師（常勤）
-    "asst_nurses": 41,  # 准看護師（常勤）
+    # 職員数（常勤 / 非常勤）
+    "nurses_ft": 39,            # 看護師（常勤）
+    "nurses_pt": 40,            # 看護師（非常勤）
+    "asst_nurses_ft": 41,      # 准看護師（常勤）
+    "asst_nurses_pt": 42,      # 准看護師（非常勤）
+    "nurse_aides_ft": 43,      # 看護補助者（常勤）
+    "nurse_aides_pt": 44,      # 看護補助者（非常勤）
+    "midwives_ft": 45,         # 助産師（常勤）
+    "midwives_pt": 46,         # 助産師（非常勤）
+    "pt_ft": 47,               # 理学療法士（常勤）
+    "pt_pt": 48,               # 理学療法士（非常勤）
+    "ot_ft": 49,               # 作業療法士（常勤）
+    "ot_pt": 50,               # 作業療法士（非常勤）
+    "st_ft": 51,               # 言語聴覚士（常勤）
+    "st_pt": 52,               # 言語聴覚士（非常勤）
+    "pharmacists_ft": 53,      # 薬剤師（常勤）
+    "pharmacists_pt": 54,      # 薬剤師（非常勤）
+    "clinical_eng_ft": 55,     # 臨床工学技士（常勤）
+    "clinical_eng_pt": 56,     # 臨床工学技士（非常勤）
+    "dietitians_ft": 57,       # 管理栄養士（常勤）
+    "dietitians_pt": 58,       # 管理栄養士（非常勤）
+    "paramedics_ft": 59,       # 救急救命士（常勤）
+    "paramedics_pt": 60,       # 救急救命士（非常勤）
     # 入院患者数
     "new_admissions_annual": 65,
     "planned_admissions_annual": 78,
@@ -82,9 +102,29 @@ Y1_COLS_R6 = {
     "therapy_beds_max": 23,
     "admission_fee": 26,
     "admission_fee_beds": 27,
-    # 職員数（常勤）
-    "nurses": 32,       # 看護師（常勤）
-    "asst_nurses": 34,  # 准看護師（常勤）
+    # 職員数（常勤 / 非常勤）
+    "nurses_ft": 32,            # 看護師（常勤）
+    "nurses_pt": 33,            # 看護師（非常勤）
+    "asst_nurses_ft": 34,      # 准看護師（常勤）
+    "asst_nurses_pt": 35,      # 准看護師（非常勤）
+    "nurse_aides_ft": 36,      # 看護補助者（常勤）
+    "nurse_aides_pt": 37,      # 看護補助者（非常勤）
+    "midwives_ft": 38,         # 助産師（常勤）
+    "midwives_pt": 39,         # 助産師（非常勤）
+    "pt_ft": 40,               # 理学療法士（常勤）
+    "pt_pt": 41,               # 理学療法士（非常勤）
+    "ot_ft": 42,               # 作業療法士（常勤）
+    "ot_pt": 43,               # 作業療法士（非常勤）
+    "st_ft": 44,               # 言語聴覚士（常勤）
+    "st_pt": 45,               # 言語聴覚士（非常勤）
+    "pharmacists_ft": 46,      # 薬剤師（常勤）
+    "pharmacists_pt": 47,      # 薬剤師（非常勤）
+    "clinical_eng_ft": 48,     # 臨床工学技士（常勤）
+    "clinical_eng_pt": 49,     # 臨床工学技士（非常勤）
+    "dietitians_ft": 50,       # 管理栄養士（常勤）
+    "dietitians_pt": 51,       # 管理栄養士（非常勤）
+    "paramedics_ft": 52,       # 救急救命士（常勤）
+    "paramedics_pt": 53,       # 救急救命士（非常勤）
     # 入院患者数
     "new_admissions_annual": 58,
     "planned_admissions_annual": 71,
@@ -296,7 +336,19 @@ def process_year(year: str) -> dict:
         "bedsByFunction": {"high_acute": 0, "acute": 0, "recovery": 0, "chronic": 0},
         "futureBedsByFunction": {"high_acute": 0, "acute": 0, "recovery": 0, "chronic": 0},
         "recoveryRelatedBeds": 0,  # 回復期 + 地域包括ケア病棟の病床数
-        "nurses": 0,
+        "staff": {
+            "nurses": [0, 0],          # [常勤, 非常勤]
+            "asst_nurses": [0, 0],
+            "nurse_aides": [0, 0],
+            "midwives": [0, 0],
+            "pt": [0, 0],
+            "ot": [0, 0],
+            "st": [0, 0],
+            "pharmacists": [0, 0],
+            "clinical_eng": [0, 0],
+            "dietitians": [0, 0],
+            "paramedics": [0, 0],
+        },
         "newAdmissions": 0,
         "plannedAdmissions": 0,
         "inpatientDays": 0,
@@ -344,7 +396,9 @@ def process_year(year: str) -> dict:
             h["futureBedsByFunction"][future_func] += ward_beds
 
         # 職員数
-        h["nurses"] += safe_int(row.iloc[y1_cols["nurses"]])
+        for staff_key in h["staff"]:
+            h["staff"][staff_key][0] += safe_int(row.iloc[y1_cols[f"{staff_key}_ft"]])
+            h["staff"][staff_key][1] += safe_int(row.iloc[y1_cols[f"{staff_key}_pt"]])
 
         # 入院患者数
         h["newAdmissions"] += safe_int(row.iloc[y1_cols["new_admissions_annual"]])
@@ -691,7 +745,8 @@ def generate_outputs(all_years_data: dict):
                 "totalBeds": h["totalBeds"],
                 "bedsByFunction": h["bedsByFunction"],
                 "futureBedsByFunction": h["futureBedsByFunction"],
-                "nurses": h["nurses"],
+                "nurses": h["staff"]["nurses"][0],  # 後方互換: 看護師常勤
+                "staff": {k: {"fullTime": v[0], "partTime": v[1]} for k, v in h["staff"].items()},
                 "newAdmissions": h["newAdmissions"],
                 "plannedAdmissions": h["plannedAdmissions"],
                 "inpatientDays": h["inpatientDays"],
@@ -718,7 +773,7 @@ def generate_outputs(all_years_data: dict):
     for ph in psych_only_hospitals:
         if (ph["pref"], ph["name"]) not in existing_names:
             pseudo_code = f"P{ph['pref']}{psych_added:04d}"
-            hospital_index_map[pseudo_code] = {
+            psych_index_entry = {
                 "code": pseudo_code,
                 "name": ph["name"],
                 "areaCode": "",
@@ -729,9 +784,16 @@ def generate_outputs(all_years_data: dict):
                 "recoveryRelatedBeds": 0,
                 "psychiatricBeds": ph["psychiatricBeds"],
             }
+            if ph.get("lat"):
+                psych_index_entry["lat"] = ph["lat"]
+            if ph.get("lng"):
+                psych_index_entry["lng"] = ph["lng"]
+            if ph.get("address"):
+                psych_index_entry["address"] = ph["address"]
+            hospital_index_map[pseudo_code] = psych_index_entry
             # 個別JSONも生成
             hosp_file = os.path.join(OUTPUT_DIR, "hospitals", f"{pseudo_code}.json")
-            write_json(hosp_file, {
+            psych_hosp_data = {
                 "code": pseudo_code,
                 "name": ph["name"],
                 "areaCode": "",
@@ -744,6 +806,11 @@ def generate_outputs(all_years_data: dict):
                         "futureBedsByFunction": {"high_acute": 0, "acute": 0, "recovery": 0, "chronic": 0},
                         "psychiatricBeds": ph["psychiatricBeds"],
                         "nurses": 0,
+                        "staff": {k: {"fullTime": 0, "partTime": 0} for k in [
+                            "nurses", "asst_nurses", "nurse_aides", "midwives",
+                            "pt", "ot", "st", "pharmacists", "clinical_eng",
+                            "dietitians", "paramedics",
+                        ]},
                         "newAdmissions": 0,
                         "plannedAdmissions": 0,
                         "surgeries": 0,
@@ -759,7 +826,14 @@ def generate_outputs(all_years_data: dict):
                         "wards": [],
                     },
                 },
-            })
+            }
+            if ph.get("lat"):
+                psych_hosp_data["lat"] = ph["lat"]
+            if ph.get("lng"):
+                psych_hosp_data["lng"] = ph["lng"]
+            if ph.get("address"):
+                psych_hosp_data["address"] = ph["address"]
+            write_json(hosp_file, psych_hosp_data)
             existing_names.add((ph["pref"], ph["name"]))
             psych_added += 1
     print(f"  Added {psych_added} psychiatric-only hospitals")
