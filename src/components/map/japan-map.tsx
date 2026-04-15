@@ -12,9 +12,10 @@ interface PrefectureData {
   acuteRate: number;
   agingRate?: number;
   utilizationRate?: number;
+  bedsPerCapita?: number;
 }
 
-type ColorMetric = "recoveryRate" | "acuteRate" | "agingRate" | "utilizationRate";
+type ColorMetric = "recoveryRate" | "acuteRate" | "agingRate" | "utilizationRate" | "bedsPerCapita";
 
 interface JapanMapProps {
   prefectureData: Record<string, PrefectureData>;
@@ -22,38 +23,33 @@ interface JapanMapProps {
   colorMetric?: ColorMetric;
 }
 
+// 統一カラースケール: 低い=青、高い=赤
+const HEAT_COLORS = [
+  "#2563eb", // 青 (最低)
+  "#60a5fa", // 薄青
+  "#a5f3fc", // 水色
+  "#fde68a", // 黄色
+  "#fb923c", // オレンジ
+  "#dc2626", // 赤 (最高)
+];
+
+// 各指標のしきい値（低い→高い順）
+const THRESHOLDS: Record<ColorMetric, number[]> = {
+  recoveryRate: [6, 10, 14, 18, 22],
+  acuteRate: [45, 50, 55, 60, 65],
+  agingRate: [23, 26, 29, 32, 35],
+  utilizationRate: [70, 73, 76, 79, 82],
+  bedsPerCapita: [80, 100, 120, 140, 160],
+};
+
 function getColor(value: number, metric: ColorMetric): string {
-  if (metric === "recoveryRate") {
-    if (value >= 22) return "#15803d";
-    if (value >= 18) return "#22c55e";
-    if (value >= 14) return "#86efac";
-    if (value >= 10) return "#fde047";
-    if (value >= 6) return "#fb923c";
-    return "#ef4444";
-  } else if (metric === "acuteRate") {
-    if (value >= 65) return "#ef4444";
-    if (value >= 60) return "#fb923c";
-    if (value >= 55) return "#fde047";
-    if (value >= 50) return "#86efac";
-    if (value >= 45) return "#22c55e";
-    return "#15803d";
-  } else if (metric === "agingRate") {
-    // 高齢化率: 実データ範囲 約22%〜37%（高い＝赤、低い＝緑）
-    if (value >= 35) return "#ef4444";
-    if (value >= 32) return "#fb923c";
-    if (value >= 29) return "#fde047";
-    if (value >= 26) return "#86efac";
-    if (value >= 23) return "#22c55e";
-    return "#15803d";
-  } else {
-    // 病床利用率: 実データ範囲 約66%〜83%（高い＝緑、低い＝赤）
-    if (value >= 82) return "#15803d";
-    if (value >= 79) return "#22c55e";
-    if (value >= 76) return "#86efac";
-    if (value >= 73) return "#fde047";
-    if (value >= 70) return "#fb923c";
-    return "#ef4444";
-  }
+  const t = THRESHOLDS[metric];
+  if (value >= t[4]) return HEAT_COLORS[5];
+  if (value >= t[3]) return HEAT_COLORS[4];
+  if (value >= t[2]) return HEAT_COLORS[3];
+  if (value >= t[1]) return HEAT_COLORS[2];
+  if (value >= t[0]) return HEAT_COLORS[1];
+  return HEAT_COLORS[0];
 }
 
 export default function JapanMap({
@@ -108,7 +104,8 @@ export default function JapanMap({
           `回復期比率: ${data.recoveryRate.toFixed(1)}%<br/>` +
           `急性期比率: ${data.acuteRate.toFixed(1)}%` +
           (data.agingRate ? `<br/>高齢化率: ${data.agingRate.toFixed(1)}%` : "") +
-          (data.utilizationRate ? `<br/>病床利用率: ${data.utilizationRate.toFixed(1)}%` : ""),
+          (data.utilizationRate ? `<br/>病床利用率: ${data.utilizationRate.toFixed(1)}%` : "") +
+          (data.bedsPerCapita ? `<br/>人口1万人あたり病床数: ${data.bedsPerCapita.toFixed(1)}` : ""),
         { sticky: true }
       );
     }

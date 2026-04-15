@@ -23,7 +23,7 @@ export default function HomePage() {
   const [national, setNational] = useState<NationalSummary[]>([]);
   const [prefData, setPrefData] = useState<Record<string, NationalSummary[]>>({});
   const [selectedYear, setSelectedYear] = useState<string>("");
-  const [mapMetric, setMapMetric] = useState<"recoveryRate" | "acuteRate" | "agingRate" | "utilizationRate">("recoveryRate");
+  const [mapMetric, setMapMetric] = useState<"recoveryRate" | "acuteRate" | "agingRate" | "utilizationRate" | "bedsPerCapita">("recoveryRate");
   const [popData, setPopData] = useState<Record<string, PopulationData>>({});
   const [hospReport, setHospReport] = useState<Record<string, { national: HospitalReportEntry; prefectures: Record<string, HospitalReportEntry> }>>({});
   const [loading, setLoading] = useState(true);
@@ -49,7 +49,7 @@ export default function HomePage() {
 
   // 地図用の都道府県データ（hookはearly returnの前に配置）
   const mapPrefData = useMemo(() => {
-    const result: Record<string, { totalBeds: number; recoveryRate: number; acuteRate: number; agingRate: number; utilizationRate: number }> = {};
+    const result: Record<string, { totalBeds: number; recoveryRate: number; acuteRate: number; agingRate: number; utilizationRate: number; bedsPerCapita: number }> = {};
     // 病院報告から利用率を取得（選択年度に近い年のデータ）
     const hrYears = Object.keys(hospReport).sort();
     const hrYear = hrYears.find(y => y === selectedYear) || hrYears[hrYears.length - 1];
@@ -68,6 +68,7 @@ export default function HomePage() {
           ((yearData.bedsByFunction.high_acute + yearData.bedsByFunction.acute) / total) * 100,
         agingRate: pop ? pop.agingRate : 0,
         utilizationRate: hr?.totalUtilization ?? 0,
+        bedsPerCapita: pop && pop.totalPopulation > 0 ? (total / pop.totalPopulation) * 10000 : 0,
       };
     });
     return result;
@@ -188,46 +189,25 @@ export default function HomePage() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">都道府県別ヒートマップ</h2>
           <div className="flex gap-2">
-            <button
-              onClick={() => setMapMetric("recoveryRate")}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                mapMetric === "recoveryRate"
-                  ? "bg-green-600 text-white"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              回復期比率
-            </button>
-            <button
-              onClick={() => setMapMetric("acuteRate")}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                mapMetric === "acuteRate"
-                  ? "bg-red-600 text-white"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              急性期比率
-            </button>
-            <button
-              onClick={() => setMapMetric("agingRate")}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                mapMetric === "agingRate"
-                  ? "bg-orange-600 text-white"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              高齢化率
-            </button>
-            <button
-              onClick={() => setMapMetric("utilizationRate")}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                mapMetric === "utilizationRate"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              病床利用率
-            </button>
+            {([
+              ["recoveryRate", "回復期比率"],
+              ["acuteRate", "急性期比率"],
+              ["agingRate", "高齢化率"],
+              ["utilizationRate", "病床利用率"],
+              ["bedsPerCapita", "人口あたり病床数"],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setMapMetric(key)}
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  mapMetric === key
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
         <JapanMap
@@ -236,29 +216,11 @@ export default function HomePage() {
           colorMetric={mapMetric}
         />
         <div className="mt-3 flex items-center justify-center gap-1 text-xs text-gray-500">
-          {mapMetric === "recoveryRate" || mapMetric === "utilizationRate" ? (
-            <>
-              <span>低い</span>
-              <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#ef4444" }} />
-              <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#fb923c" }} />
-              <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#fde047" }} />
-              <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#86efac" }} />
-              <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#22c55e" }} />
-              <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#15803d" }} />
-              <span>高い</span>
-            </>
-          ) : (
-            <>
-              <span>低い</span>
-              <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#15803d" }} />
-              <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#22c55e" }} />
-              <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#86efac" }} />
-              <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#fde047" }} />
-              <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#fb923c" }} />
-              <span className="inline-block h-3 w-4 rounded" style={{ backgroundColor: "#ef4444" }} />
-              <span>高い{mapMetric === "acuteRate" ? "（過剰）" : ""}</span>
-            </>
-          )}
+          <span>低い</span>
+          {["#2563eb", "#60a5fa", "#a5f3fc", "#fde68a", "#fb923c", "#dc2626"].map((c) => (
+            <span key={c} className="inline-block h-3 w-4 rounded" style={{ backgroundColor: c }} />
+          ))}
+          <span>高い</span>
         </div>
       </div>
     </div>
