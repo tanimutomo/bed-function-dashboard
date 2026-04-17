@@ -133,6 +133,7 @@ export default function HospitalDetailPage() {
   const [areaHospitalsFromIndex, setAreaHospitalsFromIndex] = useState<
     { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number>; lat?: number; lng?: number }[]
   >([]);
+  const [planningAreaCode, setPlanningAreaCode] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -152,6 +153,7 @@ export default function HospitalDetailPage() {
             // まず自院のインデックスエントリからareaCodeを取得し、それでマッチ
             const selfInIndex = idx.find((h: { code: string }) => h.code === code);
             const indexAreaCode = selfInIndex?.areaCode || d.areaCode;
+            setPlanningAreaCode(indexAreaCode);
             const sameArea = idx
               .filter((h: { areaCode: string }) => h.areaCode === indexAreaCode)
               .map((h: { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number>; lat?: number; lng?: number }) => ({
@@ -531,9 +533,12 @@ export default function HospitalDetailPage() {
         )}
       </div>
 
-      {/* 地域の将来人口（医療需要の前提） */}
+      {/* 地域の将来人口（医療需要の前提） — 所属構想区域の集計 */}
       <div className="mb-6">
-        <FuturePopulationPanel prefCode={detail.prefecture} />
+        <FuturePopulationPanel
+          areaCode={planningAreaCode || undefined}
+          prefCode={detail.prefecture}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

@@ -98,6 +98,7 @@ export default function PsychiatricDetailPage() {
   const [prefPsychHospitals, setPrefPsychHospitals] = useState<
     { code: string; name: string; totalBeds: number; lat?: number; lng?: number }[]
   >([]);
+  const [planningAreaCode, setPlanningAreaCode] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -117,6 +118,11 @@ export default function PsychiatricDetailPage() {
             String(h.prefecture).padStart(2, "0") === pref && (h.psychiatricBeds || 0) > 0
         );
         setPrefPsychHospitals(psych);
+        // 構想区域コード: 個別JSONは市区町村コードなので index から引く
+        const selfInIndex = allHospitals.find((h: { code: string }) => h.code === code);
+        if (selfInIndex?.areaCode) {
+          setPlanningAreaCode(selfInIndex.areaCode);
+        }
       }
       setLoading(false);
     });
@@ -221,12 +227,17 @@ export default function PsychiatricDetailPage() {
         </div>
       </div>
 
-      {/* 地域の将来人口 + 精神疾患 入院患者数推計 */}
+      {/* 地域の将来人口 + 精神疾患 入院患者数推計 — 所属構想区域の集計 */}
       <div className="mb-6">
         <FuturePopulationPanel
+          areaCode={planningAreaCode || undefined}
           prefCode={String(detail.prefecture).padStart(2, "0")}
           diseaseCategory="psychiatric"
-          title={`${PREFECTURE_NAMES[detail.prefecture] || ""}の将来人口と精神科入院患者数推計`}
+          title={
+            planningAreaCode
+              ? `${detail.areaName || ""}構想区域の将来人口と精神科入院患者数推計`
+              : `${PREFECTURE_NAMES[detail.prefecture] || ""}の将来人口と精神科入院患者数推計`
+          }
         />
       </div>
 

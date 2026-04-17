@@ -102,7 +102,11 @@ export function FuturePopulationPanel({ prefCode, areaCode, title, diseaseCatego
   }
 
   const years = Object.keys(scopedYears).sort();
-  const heading = title ?? `${scopedName || "地域"}の将来人口（医療需要の前提）`;
+  const isAreaScope = !!(areaCode && areaData?.areas[areaCode]);
+  const defaultHeading = isAreaScope
+    ? `${scopedName || "構想区域"}構想区域の将来人口（医療需要の前提）`
+    : `${scopedName || "地域"}の将来人口（医療需要の前提）`;
+  const heading = title ?? defaultHeading;
 
   if (years.length === 0) {
     return (
