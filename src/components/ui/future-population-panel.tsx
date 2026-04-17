@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   fetchPopulationFuture,
+  fetchPopulationFutureAreas,
   PREFECTURE_NAMES,
   type PopulationFutureData,
+  type PopulationFutureAreasData,
   type PopulationFutureYear,
 } from "@/lib/data";
 import {
@@ -15,8 +17,10 @@ import {
 } from "@/lib/patient-forecast";
 
 interface FuturePopulationPanelProps {
-  /** 都道府県コード (2桁ゼロパディング) */
-  prefCode: string;
+  /** 都道府県コード (2桁ゼロパディング)。areaCode と排他。 */
+  prefCode?: string;
+  /** 構想区域コード。こちらが指定されれば都道府県より優先。 */
+  areaCode?: string;
   /** 表示するタイトル（省略時は自動生成） */
   title?: string;
   /** 推計患者数に使う疾患カテゴリ（デフォルト: "overall" = 全疾患） */
@@ -38,20 +42,32 @@ function formatPct(value: number): string {
  * データが無い場合は全国値へのリンクのみ表示。
  * 受療率データが利用可能であれば、推計入院患者数も同時表示。
  */
-export function FuturePopulationPanel({ prefCode, title, diseaseCategory = "overall" }: FuturePopulationPanelProps) {
+export function FuturePopulationPanel({ prefCode, areaCode, title, diseaseCategory = "overall" }: FuturePopulationPanelProps) {
   const [data, setData] = useState<PopulationFutureData | null>(null);
+  const [areaData, setAreaData] = useState<PopulationFutureAreasData | null>(null);
   const [rates, setRates] = useState<UtilizationRates | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchPopulationFuture(), fetchUtilizationRates()])
-      .then(([d, r]) => {
-        setData(d);
-        setRates(r);
+    // areaCode 指定時は area データも読む
+    const fetchers: Promise<unknown>[] = [
+      fetchPopulationFuture(),
+      fetchUtilizationRates(),
+    ];
+    if (areaCode) {
+      fetchers.push(fetchPopulationFutureAreas());
+    }
+    Promise.all(fetchers)
+      .then((results) => {
+        setData(results[0] as PopulationFutureData);
+        setRates(results[1] as UtilizationRates);
+        if (areaCode) {
+          setAreaData(results[2] as PopulationFutureAreasData);
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [areaCode]);
 
   if (loading) {
     return (
@@ -61,24 +77,45 @@ export function FuturePopulationPanel({ prefCode, title, diseaseCategory = "over
     );
   }
 
-  const pref = data?.prefectures[prefCode];
-  const years = pref ? Object.keys(pref.years).sort() : [];
-  const prefName = PREFECTURE_NAMES[prefCode] ?? pref?.name ?? "";
+  // areaCode 指定時は構想区域データ、そうでなければ都道府県データを使う
+  let scopedYears: Record<string, PopulationFutureYear> = {};
+  let scopedName = "";
+  let scopeLabel = "";
+  let scopeNote = "";
+  if (areaCode && areaData) {
+    const area = areaData.areas[areaCode];
+    if (area) {
+      scopedYears = area.years;
+      scopedName = area.name;
+      const prefName = PREFECTURE_NAMES[area.prefecture] ?? "";
+      scopeLabel = `${prefName}${prefName ? " / " : ""}${area.name}構想区域`;
+      scopeNote = `IPSS 令和5年推計（${area.municipalities.length}市区町村の合算）`;
+    }
+  } else if (prefCode) {
+    const pref = data?.prefectures[prefCode];
+    if (pref) {
+      scopedYears = pref.years;
+      scopedName = PREFECTURE_NAMES[prefCode] ?? pref.name;
+      scopeLabel = scopedName;
+      scopeNote = "IPSS 令和5年推計";
+    }
+  }
 
-  const heading = title ?? `${prefName || "地域"}の将来人口（医療需要の前提）`;
+  const years = Object.keys(scopedYears).sort();
+  const heading = title ?? `${scopedName || "地域"}の将来人口（医療需要の前提）`;
 
-  if (!pref || years.length === 0) {
+  if (years.length === 0) {
     return (
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="mb-1 text-lg font-semibold">{heading}</h2>
         <p className="text-sm text-gray-500">
-          この都道府県の将来推計人口は未取り込みです。
+          この{areaCode ? "構想区域" : "都道府県"}の将来推計人口は未取り込みです。
           <Link href="/population" className="ml-1 text-blue-600 hover:underline">
             全国の推計を見る →
           </Link>
         </p>
         <p className="mt-2 text-xs text-gray-400">
-          取り込み手順は <code className="rounded bg-gray-100 px-1">scripts/preprocess_ipss.py</code> を参照
+          取り込み手順は <code className="rounded bg-gray-100 px-1">scripts/preprocess_ipss{areaCode ? "_areas" : ""}.py</code> を参照
         </p>
       </div>
     );
@@ -86,8 +123,8 @@ export function FuturePopulationPanel({ prefCode, title, diseaseCategory = "over
 
   const baseYear = years[0];
   const endYear = years[years.length - 1];
-  const base: PopulationFutureYear = pref.years[baseYear];
-  const end: PopulationFutureYear = pref.years[endYear];
+  const base: PopulationFutureYear = scopedYears[baseYear];
+  const end: PopulationFutureYear = scopedYears[endYear];
 
   const totalChange = pct(base.total, end.total);
   const over75Change = pct(base.over75 ?? 0, end.over75 ?? 0);
@@ -117,7 +154,8 @@ export function FuturePopulationPanel({ prefCode, title, diseaseCategory = "over
         <div>
           <h2 className="text-lg font-semibold">{heading}</h2>
           <p className="mt-1 text-xs text-gray-400">
-            IPSS 令和5年推計 / {baseYear}→{endYear}年
+            {scopeLabel && <span className="mr-1">{scopeLabel} /</span>}
+            {scopeNote} / {baseYear}→{endYear}年
           </p>
         </div>
         <Link

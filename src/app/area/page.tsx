@@ -250,7 +250,7 @@ export default function AreaPage() {
 
           {/* 地域の将来人口 */}
           <div className="mb-6">
-            <FuturePopulationPanel prefCode={areaDetail.prefecture} />
+            <FuturePopulationPanel areaCode={selectedArea} prefCode={areaDetail.prefecture} />
           </div>
 
           {/* 病院別棒グラフ */}

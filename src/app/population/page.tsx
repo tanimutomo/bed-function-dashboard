@@ -12,9 +12,11 @@ import {
 } from "@/components/charts/patient-forecast-chart";
 import {
   fetchPopulationFuture,
+  fetchPopulationFutureAreas,
   PREFECTURE_LIST,
   PREFECTURE_NAMES,
   type PopulationFutureData,
+  type PopulationFutureAreasData,
   type PopulationFutureYear,
 } from "@/lib/data";
 import {
@@ -23,7 +25,8 @@ import {
   type UtilizationRates,
 } from "@/lib/patient-forecast";
 
-type Scope = "national" | string;
+/** scope は "national" / "pref:<code>" / "area:<code>" 形式 */
+type Scope = string;
 
 function toTrendPoints(years: Record<string, PopulationFutureYear>): PopulationTrendPoint[] {
   return Object.entries(years)
@@ -48,16 +51,23 @@ function formatPct(value: number, digits = 1): string {
 
 export default function PopulationPage() {
   const [data, setData] = useState<PopulationFutureData | null>(null);
+  const [areaData, setAreaData] = useState<PopulationFutureAreasData | null>(null);
   const [rates, setRates] = useState<UtilizationRates | null>(null);
   const [scope, setScope] = useState<Scope>("national");
+  const [areaPrefFilter, setAreaPrefFilter] = useState<string>(""); // 構想区域セレクタの前段フィルタ
   const [forecastKind, setForecastKind] = useState<"inpatient" | "outpatient">("inpatient");
   const [forecastCategory, setForecastCategory] = useState<string>("overall");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchPopulationFuture(), fetchUtilizationRates()])
-      .then(([d, r]) => {
+    Promise.all([
+      fetchPopulationFuture(),
+      fetchPopulationFutureAreas(),
+      fetchUtilizationRates(),
+    ])
+      .then(([d, a, r]) => {
         setData(d);
+        setAreaData(a);
         setRates(r);
         setLoading(false);
       })
@@ -67,15 +77,25 @@ export default function PopulationPage() {
   const selected = useMemo(() => {
     if (!data) return null;
     if (scope === "national") {
+      return { name: "全国", years: data.national.years };
+    }
+    if (scope.startsWith("pref:")) {
+      const code = scope.slice(5);
+      const pref = data.prefectures[code];
+      return pref ?? null;
+    }
+    if (scope.startsWith("area:") && areaData) {
+      const code = scope.slice(5);
+      const area = areaData.areas[code];
+      if (!area) return null;
+      const prefName = PREFECTURE_NAMES[area.prefecture] ?? "";
       return {
-        name: "全国",
-        years: data.national.years,
+        name: `${prefName} ${area.name}構想区域`,
+        years: area.years,
       };
     }
-    const pref = data.prefectures[scope];
-    if (!pref) return null;
-    return pref;
-  }, [data, scope]);
+    return null;
+  }, [data, areaData, scope]);
 
   const trendPoints = useMemo(() => {
     if (!selected) return [];
@@ -156,6 +176,7 @@ export default function PopulationPage() {
     endOver75Rate = end.over75Rate ?? 0;
   }
 
+  // 全国以外の選択かつトレンドポイントが空 = データ未取り込み
   const showSkeleton = scope !== "national" && trendPoints.length === 0;
 
   return (
@@ -171,18 +192,58 @@ export default function PopulationPage() {
             {years[years.length - 1] ?? "-"} 年
           </p>
         </div>
-        <select
-          value={scope}
-          onChange={(e) => setScope(e.target.value)}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-        >
-          <option value="national">全国</option>
-          {availablePrefs.map(([code, name]) => (
-            <option key={code} value={code}>
-              {name}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap gap-2">
+          {/* 都道府県セレクタ */}
+          <select
+            value={scope.startsWith("pref:") ? scope : scope === "national" ? "national" : ""}
+            onChange={(e) => {
+              setScope(e.target.value || "national");
+              setAreaPrefFilter("");
+            }}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value="national">全国</option>
+            {availablePrefs.map(([code, name]) => (
+              <option key={code} value={`pref:${code}`}>
+                {name}
+              </option>
+            ))}
+          </select>
+
+          {/* 構想区域セレクタ */}
+          <select
+            value={areaPrefFilter}
+            onChange={(e) => {
+              setAreaPrefFilter(e.target.value);
+              if (!e.target.value) setScope("national");
+            }}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value="">構想区域でみる…</option>
+            {PREFECTURE_LIST.map(([code, name]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
+          {areaPrefFilter && areaData && (
+            <select
+              value={scope.startsWith("area:") ? scope : ""}
+              onChange={(e) => setScope(e.target.value || "national")}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="">構想区域を選択</option>
+              {Object.entries(areaData.areas)
+                .filter(([, a]) => a.prefecture === areaPrefFilter)
+                .sort((a, b) => a[1].name.localeCompare(b[1].name, "ja"))
+                .map(([code, a]) => (
+                  <option key={code} value={`area:${code}`}>
+                    {a.name}
+                  </option>
+                ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {/* 解説 */}
@@ -252,7 +313,7 @@ export default function PopulationPage() {
           <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold">
               人口構成の推移
-              {scope !== "national" && ` - ${PREFECTURE_NAMES[scope]}`}
+              {scope !== "national" && selected && ` - ${selected.name}`}
             </h2>
             <PopulationTrendChart data={trendPoints} height={420} />
             <p className="mt-3 text-xs text-gray-400">
@@ -275,7 +336,7 @@ export default function PopulationPage() {
                   <div>
                     <h2 className="text-lg font-semibold">
                       将来患者数推計
-                      {scope !== "national" && ` - ${PREFECTURE_NAMES[scope]}`}
+                      {scope !== "national" && selected && ` - ${selected.name}`}
                     </h2>
                     <p className="mt-1 text-xs text-gray-400">
                       IPSS推計人口 × 令和5年患者調査の年齢階級別受療率で算出（1日あたり推計人数）

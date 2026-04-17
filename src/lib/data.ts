@@ -137,6 +137,27 @@ export async function fetchPopulationFuture(): Promise<PopulationFutureData> {
   return res.json();
 }
 
+export interface PopulationFutureArea {
+  name: string;
+  prefecture: string;
+  municipalities: string[];
+  years: Record<string, PopulationFutureYear>;
+}
+
+export interface PopulationFutureAreasData {
+  source: string;
+  sourceUrl?: string;
+  baseYear: string;
+  years: string[];
+  mappingNote?: string;
+  areas: Record<string, PopulationFutureArea>;
+}
+
+export async function fetchPopulationFutureAreas(): Promise<PopulationFutureAreasData> {
+  const res = await fetch(`${BASE_PATH}/summary/population_future_areas.json`);
+  return res.json();
+}
+
 /** 都道府県コード→名称（ソート済み配列） */
 export const PREFECTURE_LIST: [string, string][] = [
   ["01", "北海道"], ["02", "青森県"], ["03", "岩手県"], ["04", "宮城県"], ["05", "秋田県"],
