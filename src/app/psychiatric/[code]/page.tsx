@@ -118,10 +118,35 @@ export default function PsychiatricDetailPage() {
             String(h.prefecture).padStart(2, "0") === pref && (h.psychiatricBeds || 0) > 0
         );
         setPrefPsychHospitals(psych);
-        // 構想区域コード: 個別JSONは市区町村コードなので index から引く
+
+        // 構想区域コードを解決:
+        // 1) index から自院エントリ（一般病院として登録されていれば areaCode あり）
+        // 2) 精神科専門病院は areaCode 未設定 → 緯度経度で同県内の最寄り一般病院から推定
         const selfInIndex = allHospitals.find((h: { code: string }) => h.code === code);
-        if (selfInIndex?.areaCode) {
-          setPlanningAreaCode(selfInIndex.areaCode);
+        let resolvedAreaCode = selfInIndex?.areaCode || "";
+        if (!resolvedAreaCode && d.lat && d.lng) {
+          const candidates = allHospitals.filter(
+            (h: { prefecture: string; areaCode: string; lat?: number; lng?: number }) =>
+              String(h.prefecture).padStart(2, "0") === pref &&
+              h.areaCode &&
+              h.lat != null &&
+              h.lng != null
+          );
+          let nearest: typeof candidates[number] | null = null;
+          let minDistSq = Infinity;
+          for (const h of candidates) {
+            const dLat = (h.lat as number) - (d.lat as number);
+            const dLng = (h.lng as number) - (d.lng as number);
+            const dSq = dLat * dLat + dLng * dLng;
+            if (dSq < minDistSq) {
+              minDistSq = dSq;
+              nearest = h;
+            }
+          }
+          if (nearest) resolvedAreaCode = nearest.areaCode;
+        }
+        if (resolvedAreaCode) {
+          setPlanningAreaCode(resolvedAreaCode);
         }
       }
       setLoading(false);
@@ -233,11 +258,6 @@ export default function PsychiatricDetailPage() {
           areaCode={planningAreaCode || undefined}
           prefCode={String(detail.prefecture).padStart(2, "0")}
           diseaseCategory="psychiatric"
-          title={
-            planningAreaCode
-              ? `${detail.areaName || ""}構想区域の将来人口と精神科入院患者数推計`
-              : `${PREFECTURE_NAMES[detail.prefecture] || ""}の将来人口と精神科入院患者数推計`
-          }
         />
       </div>
 

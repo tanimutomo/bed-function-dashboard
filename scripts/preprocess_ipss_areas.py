@@ -74,11 +74,15 @@ def build_area_to_municipality_mapping():
 
     area_to_munis = defaultdict(set)
     area_to_pref = {}
+    # 構想区域名は hospitals/index.json の areaName を正とする
+    # (areas/index.json に無い構想区域が存在する: 例 Chiba 1203=東葛北部)
+    area_name_by_pref_code = {}
 
     for h in hospitals_idx:
         code = h["code"]
         area_code = h.get("areaCode", "")
-        if not area_code or area_code not in valid_area_codes:
+        area_name = h.get("areaName", "")
+        if not area_code:
             continue
         pref = str(h.get("prefecture", "")).zfill(2)
 
@@ -98,8 +102,10 @@ def build_area_to_municipality_mapping():
             continue
         area_to_munis[area_code].add(muni_str)
         area_to_pref[area_code] = pref
+        if area_name and (pref, area_code) not in area_name_by_pref_code:
+            area_name_by_pref_code[(pref, area_code)] = area_name
 
-    return dict(area_to_munis), area_to_pref, area_idx
+    return dict(area_to_munis), area_to_pref, area_idx, area_name_by_pref_code
 
 
 def read_muni_pop_series(path):
@@ -164,7 +170,7 @@ def main():
 
     # 1. マッピング構築
     print("Building area→municipality mapping from hospital data ...")
-    area_to_munis, area_to_pref, area_idx = build_area_to_municipality_mapping()
+    area_to_munis, area_to_pref, area_idx, area_name_by_pref_code = build_area_to_municipality_mapping()
     print(f"  Areas mapped: {len(area_to_munis)}")
     total_munis = sum(len(m) for m in area_to_munis.values())
     print(f"  Total municipality entries: {total_munis}")
@@ -187,7 +193,21 @@ def main():
         return
 
     # 3. 構想区域ごとに集計
-    name_by_code = {a["code"]: a["name"] for a in area_idx}
+    # 構想区域名の優先順位:
+    #   a) hospitals/index.json の areaName (正) — 例: Chiba 1203 → 東葛北部
+    #   b) areas/index.json の (prefecture, code) 一致
+    #   c) areas/index.json の code のみ一致 (fallback)
+    areas_name_by_pref_code = {
+        (str(a["prefecture"]).zfill(2), a["code"]): a["name"] for a in area_idx
+    }
+    areas_name_by_code = {a["code"]: a["name"] for a in area_idx}
+
+    def resolve_area_name(area_code, pref):
+        return (
+            area_name_by_pref_code.get((pref, area_code))
+            or areas_name_by_pref_code.get((pref, area_code))
+            or areas_name_by_code.get(area_code, area_code)
+        )
 
     areas_out = {}
     unmatched_muni = set()
@@ -210,9 +230,10 @@ def main():
                 years_out[year] = build_year_entry(**totals)
 
         if years_out:
+            pref = area_to_pref.get(area_code, "")
             areas_out[area_code] = {
-                "name": name_by_code.get(area_code, area_code),
-                "prefecture": area_to_pref.get(area_code, ""),
+                "name": resolve_area_name(area_code, pref),
+                "prefecture": pref,
                 "municipalities": sorted(matched_munis),
                 "years": years_out,
             }

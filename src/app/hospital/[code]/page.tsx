@@ -153,7 +153,11 @@ export default function HospitalDetailPage() {
             // まず自院のインデックスエントリからareaCodeを取得し、それでマッチ
             const selfInIndex = idx.find((h: { code: string }) => h.code === code);
             const indexAreaCode = selfInIndex?.areaCode || d.areaCode;
-            setPlanningAreaCode(indexAreaCode);
+            // FuturePopulationPanel には構想区域コード(= selfInIndex.areaCode)のみ渡す。
+            // d.areaCode は市区町村コードなので対象外。
+            if (selfInIndex?.areaCode) {
+              setPlanningAreaCode(selfInIndex.areaCode);
+            }
             const sameArea = idx
               .filter((h: { areaCode: string }) => h.areaCode === indexAreaCode)
               .map((h: { code: string; name: string; totalBeds: number; bedsByFunction: Record<string, number>; lat?: number; lng?: number }) => ({
