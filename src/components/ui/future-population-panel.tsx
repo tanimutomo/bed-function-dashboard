@@ -8,12 +8,19 @@ import {
   type PopulationFutureData,
   type PopulationFutureYear,
 } from "@/lib/data";
+import {
+  fetchUtilizationRates,
+  forecastPatients,
+  type UtilizationRates,
+} from "@/lib/patient-forecast";
 
 interface FuturePopulationPanelProps {
   /** 都道府県コード (2桁ゼロパディング) */
   prefCode: string;
   /** 表示するタイトル（省略時は自動生成） */
   title?: string;
+  /** 推計患者数に使う疾患カテゴリ（デフォルト: "overall" = 全疾患） */
+  diseaseCategory?: string;
 }
 
 function pct(base: number, end: number): number {
@@ -29,15 +36,18 @@ function formatPct(value: number): string {
  * 地域の将来人口を簡易表示するパネル。
  * 都道府県レベルのIPSS推計をそのまま引き当てる。
  * データが無い場合は全国値へのリンクのみ表示。
+ * 受療率データが利用可能であれば、推計入院患者数も同時表示。
  */
-export function FuturePopulationPanel({ prefCode, title }: FuturePopulationPanelProps) {
+export function FuturePopulationPanel({ prefCode, title, diseaseCategory = "overall" }: FuturePopulationPanelProps) {
   const [data, setData] = useState<PopulationFutureData | null>(null);
+  const [rates, setRates] = useState<UtilizationRates | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchPopulationFuture()
-      .then((d) => {
+    Promise.all([fetchPopulationFuture(), fetchUtilizationRates()])
+      .then(([d, r]) => {
         setData(d);
+        setRates(r);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -82,6 +92,24 @@ export function FuturePopulationPanel({ prefCode, title }: FuturePopulationPanel
   const totalChange = pct(base.total, end.total);
   const over75Change = pct(base.over75 ?? 0, end.over75 ?? 0);
   const workingChange = pct(base.age15_64, end.age15_64);
+
+  // 推計入院患者数（受療率データが利用可能な場合のみ）
+  let patientForecastBase: number | null = null;
+  let patientForecastEnd: number | null = null;
+  let patientChange: number | null = null;
+  let diseaseLabel: string | null = null;
+  if (rates) {
+    const activeRates =
+      diseaseCategory === "overall"
+        ? rates.overall
+        : rates.diseases[diseaseCategory];
+    if (activeRates) {
+      diseaseLabel = diseaseCategory === "overall" ? "全疾病" : rates.diseases[diseaseCategory]?.label ?? "";
+      patientForecastBase = forecastPatients(base, activeRates).inpatient;
+      patientForecastEnd = forecastPatients(end, activeRates).inpatient;
+      patientChange = pct(patientForecastBase, patientForecastEnd);
+    }
+  }
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
@@ -130,6 +158,37 @@ export function FuturePopulationPanel({ prefCode, title }: FuturePopulationPanel
           }
         />
       </div>
+
+      {patientForecastEnd != null && patientForecastBase != null && patientChange != null && (
+        <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs text-blue-900">
+                推計入院患者数（1日あたり）
+                {diseaseLabel && diseaseLabel !== "全疾病" && (
+                  <span className="ml-1 text-blue-700">/ {diseaseLabel}</span>
+                )}
+              </p>
+              <p className="mt-1 text-xl font-bold text-blue-900">
+                {Math.round(patientForecastEnd).toLocaleString()}
+                <span className="ml-1 text-sm font-normal text-blue-700">人</span>
+                <span className="ml-2 text-xs text-blue-600">
+                  ({baseYear}年 {Math.round(patientForecastBase).toLocaleString()}人 → {endYear}年 {formatPct(patientChange)}%)
+                </span>
+              </p>
+            </div>
+            <Link
+              href="/population"
+              className="text-xs text-blue-700 underline hover:text-blue-900"
+            >
+              推計ロジックを見る →
+            </Link>
+          </div>
+          <p className="mt-2 text-[11px] text-blue-700">
+            IPSS推計人口 × 令和5年患者調査の年齢階級別受療率で算出
+          </p>
+        </div>
+      )}
 
       <p className="mt-3 text-xs text-gray-400">
         ※ 75歳以上は一人当たり入院受療率が他年齢層より顕著に高く、病床需要の中核指標です。

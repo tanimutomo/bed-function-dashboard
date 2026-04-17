@@ -7,12 +7,21 @@ import {
   type PopulationTrendPoint,
 } from "@/components/charts/population-trend-chart";
 import {
+  PatientForecastChart,
+  type PatientForecastPoint,
+} from "@/components/charts/patient-forecast-chart";
+import {
   fetchPopulationFuture,
   PREFECTURE_LIST,
   PREFECTURE_NAMES,
   type PopulationFutureData,
   type PopulationFutureYear,
 } from "@/lib/data";
+import {
+  fetchUtilizationRates,
+  forecastPatientSeries,
+  type UtilizationRates,
+} from "@/lib/patient-forecast";
 
 type Scope = "national" | string;
 
@@ -39,13 +48,17 @@ function formatPct(value: number, digits = 1): string {
 
 export default function PopulationPage() {
   const [data, setData] = useState<PopulationFutureData | null>(null);
+  const [rates, setRates] = useState<UtilizationRates | null>(null);
   const [scope, setScope] = useState<Scope>("national");
+  const [forecastKind, setForecastKind] = useState<"inpatient" | "outpatient">("inpatient");
+  const [forecastCategory, setForecastCategory] = useState<string>("overall");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchPopulationFuture()
-      .then((d) => {
+    Promise.all([fetchPopulationFuture(), fetchUtilizationRates()])
+      .then(([d, r]) => {
         setData(d);
+        setRates(r);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -68,6 +81,33 @@ export default function PopulationPage() {
     if (!selected) return [];
     return toTrendPoints(selected.years);
   }, [selected]);
+
+  // 将来患者数推計
+  const forecastSeries = useMemo(() => {
+    if (!selected || !rates) return null;
+    const active =
+      forecastCategory === "overall"
+        ? rates.overall
+        : rates.diseases[forecastCategory];
+    if (!active) return null;
+    return forecastPatientSeries(selected.years, active);
+  }, [selected, rates, forecastCategory]);
+
+  const forecastPoints: PatientForecastPoint[] = useMemo(() => {
+    if (!forecastSeries) return [];
+    return Object.entries(forecastSeries)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([year, f]) => {
+        const byAge = forecastKind === "inpatient" ? f.inpatientByAge : f.outpatientByAge;
+        return {
+          year,
+          under15: Math.round(byAge.under15),
+          age15_64: Math.round(byAge.age15_64),
+          age65_74: Math.round(byAge.age65_74),
+          over75: Math.round(byAge.over75),
+        };
+      });
+  }, [forecastSeries, forecastKind]);
 
   // 都道府県レベルでデータが揃っているものだけをセレクタに出す
   const availablePrefs = useMemo(() => {
@@ -220,6 +260,103 @@ export default function PopulationPage() {
               75歳以上は一人当たり入院受療率が他の年齢層より顕著に高く、病床需要の中核指標です。
             </p>
           </div>
+
+          {/* 将来患者数推計 */}
+          {rates && forecastPoints.length > 0 && (() => {
+            const firstYear = forecastPoints[0];
+            const lastYear = forecastPoints[forecastPoints.length - 1];
+            const firstTotal = firstYear.under15 + firstYear.age15_64 + firstYear.age65_74 + firstYear.over75;
+            const lastTotal = lastYear.under15 + lastYear.age15_64 + lastYear.age65_74 + lastYear.over75;
+            const changePct = firstTotal > 0 ? ((lastTotal - firstTotal) / firstTotal) * 100 : 0;
+            const over75Share = lastTotal > 0 ? (lastYear.over75 / lastTotal) * 100 : 0;
+            return (
+              <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold">
+                      将来患者数推計
+                      {scope !== "national" && ` - ${PREFECTURE_NAMES[scope]}`}
+                    </h2>
+                    <p className="mt-1 text-xs text-gray-400">
+                      IPSS推計人口 × 令和5年患者調査の年齢階級別受療率で算出（1日あたり推計人数）
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {/* 入院/外来 切替 */}
+                    <div className="flex rounded-md border border-gray-200 p-0.5">
+                      {(["inpatient", "outpatient"] as const).map((k) => (
+                        <button
+                          key={k}
+                          onClick={() => setForecastKind(k)}
+                          className={`rounded px-3 py-1 text-xs font-medium transition ${
+                            forecastKind === k
+                              ? "bg-blue-600 text-white"
+                              : "text-gray-600 hover:bg-gray-50"
+                          }`}
+                        >
+                          {k === "inpatient" ? "入院" : "外来"}
+                        </button>
+                      ))}
+                    </div>
+                    {/* カテゴリ切替 */}
+                    <select
+                      value={forecastCategory}
+                      onChange={(e) => setForecastCategory(e.target.value)}
+                      className="rounded-md border border-gray-300 px-3 py-1 text-xs"
+                    >
+                      <option value="overall">全体</option>
+                      {Object.entries(rates.diseases).map(([key, d]) => (
+                        <option key={key} value={key}>
+                          {d.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* KPI */}
+                <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-xs text-gray-500">{lastYear.year}年 推計{forecastKind === "inpatient" ? "入院" : "外来"}患者数（1日）</p>
+                    <p className="mt-1 text-xl font-bold text-gray-900">
+                      {Math.round(lastTotal).toLocaleString()}
+                      <span className="ml-1 text-sm font-normal text-gray-500">人</span>
+                    </p>
+                    <p className={`mt-0.5 text-xs ${changePct > 0 ? "text-red-600" : changePct < 0 ? "text-blue-600" : "text-gray-500"}`}>
+                      {firstYear.year}年比 {formatPct(changePct)}%
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-red-200 bg-red-50 p-3">
+                    <p className="text-xs text-gray-500">うち75歳以上（後期高齢）</p>
+                    <p className="mt-1 text-xl font-bold text-gray-900">
+                      {Math.round(lastYear.over75).toLocaleString()}
+                      <span className="ml-1 text-sm font-normal text-gray-500">人</span>
+                    </p>
+                    <p className="mt-0.5 text-xs text-gray-600">
+                      構成比 {over75Share.toFixed(1)}%
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-xs text-gray-500">使用受療率</p>
+                    <p className="mt-1 text-sm text-gray-700">
+                      {forecastCategory === "overall"
+                        ? "全疾病合計（令和5年患者調査）"
+                        : rates.diseases[forecastCategory]?.label ?? ""}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">
+                      年齢階級別 × 推計人口で算出
+                    </p>
+                  </div>
+                </div>
+
+                <PatientForecastChart data={forecastPoints} height={380} kind={forecastKind} />
+                <p className="mt-3 text-xs text-gray-400">
+                  ※ 受療率は全国値を使用（都道府県別受療率は年齢構成を除くと差分が小さいため）。
+                  経営の粗い見通しとしては有用ですが、地域固有の病床構造や患者流出入は別途考慮が必要です。
+                </p>
+              </div>
+            );
+          })()}
 
           {/* 年次テーブル */}
           <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">

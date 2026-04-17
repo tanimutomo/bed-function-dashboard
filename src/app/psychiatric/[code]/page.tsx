@@ -19,6 +19,7 @@ import {
 import { fetchHospitalDetail, fetch630Summary, fetchHospitalIndex, PREFECTURE_NAMES } from "@/lib/data";
 import HospitalMap from "@/components/map/hospital-map";
 import type { HospitalMapItem } from "@/components/map/hospital-map";
+import { FuturePopulationPanel } from "@/components/ui/future-population-panel";
 
 interface FacilityData {
   hospitals: number;
@@ -218,6 +219,15 @@ export default function PsychiatricDetailPage() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* 地域の将来人口 + 精神疾患 入院患者数推計 */}
+      <div className="mb-6">
+        <FuturePopulationPanel
+          prefCode={String(detail.prefecture).padStart(2, "0")}
+          diseaseCategory="psychiatric"
+          title={`${PREFECTURE_NAMES[detail.prefecture] || ""}の将来人口と精神科入院患者数推計`}
+        />
       </div>
 
       {/* 都道府県の精神科医療データ */}
