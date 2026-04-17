@@ -17,6 +17,7 @@ import {
 import { fetchAreaIndex, fetchAreaDetail, fetchHospitalIndex, PREFECTURE_NAMES, PREFECTURE_LIST } from "@/lib/data";
 import { FUNCTION_COLORS, FUNCTION_LABELS } from "@/types";
 import type { Area, FunctionType } from "@/types";
+import { FuturePopulationPanel } from "@/components/ui/future-population-panel";
 
 interface AreaDetailData {
   code: string;
@@ -245,6 +246,11 @@ export default function AreaPage() {
                 %
               </p>
             </div>
+          </div>
+
+          {/* 地域の将来人口 */}
+          <div className="mb-6">
+            <FuturePopulationPanel prefCode={areaDetail.prefecture} />
           </div>
 
           {/* 病院別棒グラフ */}

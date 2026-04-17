@@ -28,6 +28,7 @@ import { fetchHospitalDetail, fetchAreaDetail, fetchHospitalIndex, PREFECTURE_NA
 import { FUNCTION_LABELS, FUNCTION_COLORS } from "@/types";
 import type { FunctionType } from "@/types";
 import HospitalMap from "@/components/map/hospital-map";
+import { FuturePopulationPanel } from "@/components/ui/future-population-panel";
 import type { HospitalMapItem } from "@/components/map/hospital-map";
 
 interface StaffEntry {
@@ -528,6 +529,11 @@ export default function HospitalDetailPage() {
             診療実績は{clinicalYear}年度のデータを表示
           </p>
         )}
+      </div>
+
+      {/* 地域の将来人口（医療需要の前提） */}
+      <div className="mb-6">
+        <FuturePopulationPanel prefCode={detail.prefecture} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

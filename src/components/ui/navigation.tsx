@@ -8,6 +8,7 @@ const navItems = [
   { href: "/area", label: "構想区域" },
   { href: "/ranking", label: "ランキング" },
   { href: "/trend", label: "経年トレンド" },
+  { href: "/population", label: "人口動態" },
   { href: "/hospital", label: "病院カルテ" },
   { href: "/psychiatric", label: "精神科", accent: true },
 ];
