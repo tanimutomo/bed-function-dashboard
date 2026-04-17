@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { KpiCard } from "@/components/ui/kpi-card";
 import {
   PopulationTrendChart,
@@ -50,13 +51,34 @@ function formatPct(value: number, digits = 1): string {
 }
 
 export default function PopulationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-7xl px-4 py-8">
+          <p className="text-gray-500">データを読み込み中...</p>
+        </div>
+      }
+    >
+      <PopulationPageInner />
+    </Suspense>
+  );
+}
+
+function PopulationPageInner() {
+  const searchParams = useSearchParams();
+  // URL query: ?scope=area:<code> or pref:<code> or national
+  //            &disease=<category>
+  const initialScope: Scope = searchParams.get("scope") ?? "national";
+  const initialDisease = searchParams.get("disease") ?? "overall";
+
   const [data, setData] = useState<PopulationFutureData | null>(null);
   const [areaData, setAreaData] = useState<PopulationFutureAreasData | null>(null);
   const [rates, setRates] = useState<UtilizationRates | null>(null);
-  const [scope, setScope] = useState<Scope>("national");
-  const [areaPrefFilter, setAreaPrefFilter] = useState<string>(""); // 構想区域セレクタの前段フィルタ
+  const [scope, setScope] = useState<Scope>(initialScope);
+  // area: scope の場合は、その構想区域の都道府県を初期フィルタにする
+  const [areaPrefFilter, setAreaPrefFilter] = useState<string>("");
   const [forecastKind, setForecastKind] = useState<"inpatient" | "outpatient">("inpatient");
-  const [forecastCategory, setForecastCategory] = useState<string>("overall");
+  const [forecastCategory, setForecastCategory] = useState<string>(initialDisease);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -69,9 +91,17 @@ export default function PopulationPage() {
         setData(d);
         setAreaData(a);
         setRates(r);
+        // area スコープの場合は、対応する都道府県をフィルタに設定
+        if (initialScope.startsWith("area:")) {
+          const code = initialScope.slice(5);
+          const pref = a.areas[code]?.prefecture;
+          if (pref) setAreaPrefFilter(pref);
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
+    // 依存は空配列: 初期化は1度だけ
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selected = useMemo(() => {

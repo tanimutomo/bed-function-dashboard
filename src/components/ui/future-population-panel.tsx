@@ -108,6 +108,18 @@ export function FuturePopulationPanel({ prefCode, areaCode, title, diseaseCatego
     : `${scopedName || "地域"}の将来人口（医療需要の前提）`;
   const heading = title ?? defaultHeading;
 
+  // /population ページへの遷移URL (現在のスコープ・疾病カテゴリを引き継ぐ)
+  const populationHref = (() => {
+    const params = new URLSearchParams();
+    if (isAreaScope && areaCode) params.set("scope", `area:${areaCode}`);
+    else if (prefCode) params.set("scope", `pref:${prefCode}`);
+    if (diseaseCategory && diseaseCategory !== "overall") {
+      params.set("disease", diseaseCategory);
+    }
+    const qs = params.toString();
+    return qs ? `/population?${qs}` : "/population";
+  })();
+
   if (years.length === 0) {
     return (
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
@@ -163,7 +175,7 @@ export function FuturePopulationPanel({ prefCode, areaCode, title, diseaseCatego
           </p>
         </div>
         <Link
-          href="/population"
+          href={populationHref}
           className="text-xs text-blue-600 hover:underline"
         >
           詳細を見る →
@@ -220,7 +232,7 @@ export function FuturePopulationPanel({ prefCode, areaCode, title, diseaseCatego
               </p>
             </div>
             <Link
-              href="/population"
+              href={populationHref}
               className="text-xs text-blue-700 underline hover:text-blue-900"
             >
               推計ロジックを見る →
