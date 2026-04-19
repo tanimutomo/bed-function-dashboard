@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   BarChart,
   Bar,
@@ -128,14 +128,14 @@ export default function PopulationPage() {
 
 function PopulationPageInner() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
   // URL query: ?scope=area:<code> or pref:<code> or national
   //            &disease=<category>
   //            &tab=dashboard | psychiatric
   const initialScope: Scope = searchParams.get("scope") ?? "national";
   const initialDisease = searchParams.get("disease") ?? "overall";
-  const initialTab: Tab = searchParams.get("tab") === "psychiatric" ? "psychiatric" : "dashboard";
+  // activeTab は URL クエリから常に派生 (サイドバーリンクで切替)
+  const activeTab: Tab =
+    searchParams.get("tab") === "psychiatric" ? "psychiatric" : "dashboard";
 
   const [data, setData] = useState<PopulationFutureData | null>(null);
   const [areaData, setAreaData] = useState<PopulationFutureAreasData | null>(null);
@@ -152,7 +152,6 @@ function PopulationPageInner() {
   // 精神科用
   const [psychSummary, setPsychSummary] = useState<PsychSummary | null>(null);
   const [scope, setScope] = useState<Scope>(initialScope);
-  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   // area: scope の場合は、その構想区域の都道府県を初期フィルタにする
   const [areaPrefFilter, setAreaPrefFilter] = useState<string>("");
   const [forecastKind, setForecastKind] = useState<"inpatient" | "outpatient">("inpatient");
@@ -196,15 +195,9 @@ function PopulationPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // タブ切替時にURL同期
-  const switchTab = (tab: Tab) => {
-    setActiveTab(tab);
-    const params = new URLSearchParams(searchParams.toString());
-    if (tab === "psychiatric") params.set("tab", "psychiatric");
-    else params.delete("tab");
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  };
+  // 初期化後のタブ切替はサイドバーリンクで実施するため、ここでの切替関数は不要。
+  // URL クエリから activeTab を常時 sync させる effect を追加。
+
 
   const selected = useMemo(() => {
     if (!data) return null;
@@ -444,14 +437,20 @@ function PopulationPageInner() {
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">地域ダッシュボード</h1>
+          <h1 className="text-2xl font-bold">
+            {activeTab === "psychiatric" ? "精神科医療" : "地域ダッシュボード"}
+          </h1>
           <p className="mt-1 text-sm text-gray-500">
-            都道府県または構想区域を選択して、人口動態・医療資源・将来推計・経年トレンドを一画面で確認
+            {activeTab === "psychiatric"
+              ? "630調査に基づく精神科医療の状況（別データソース、都道府県単位）"
+              : "都道府県または構想区域を選択して、人口動態・医療資源・将来推計・経年トレンドを一画面で確認"}
           </p>
-          <p className="mt-0.5 text-xs text-gray-400">
-            基準年 {data.baseYear} 年 / 推計期間 {years[0] ?? "-"}〜
-            {years[years.length - 1] ?? "-"} 年
-          </p>
+          {activeTab === "dashboard" && (
+            <p className="mt-0.5 text-xs text-gray-400">
+              基準年 {data.baseYear} 年 / 推計期間 {years[0] ?? "-"}〜
+              {years[years.length - 1] ?? "-"} 年
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {/* 都道府県セレクタ */}
@@ -505,31 +504,6 @@ function PopulationPageInner() {
             </select>
           )}
         </div>
-      </div>
-
-      {/* タブ切替 */}
-      <div className="mb-6 flex items-end gap-1 border-b border-gray-200">
-        <button
-          onClick={() => switchTab("dashboard")}
-          className={`rounded-t-md px-4 py-2 text-sm font-medium transition ${
-            activeTab === "dashboard"
-              ? "border-b-2 border-blue-600 bg-blue-50 text-blue-900"
-              : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-          }`}
-        >
-          地域ダッシュボード
-        </button>
-        <button
-          onClick={() => switchTab("psychiatric")}
-          className={`rounded-t-md px-4 py-2 text-sm font-medium transition ${
-            activeTab === "psychiatric"
-              ? "border-b-2 border-blue-600 bg-blue-50 text-blue-900"
-              : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-          }`}
-        >
-          精神科医療
-          <span className="ml-1.5 text-[10px] text-gray-400">別データソース (630調査)</span>
-        </button>
       </div>
 
       {activeTab === "dashboard" && (

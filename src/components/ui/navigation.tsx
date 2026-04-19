@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 
 interface NavLeaf {
   href: string;
@@ -38,32 +38,78 @@ const navItems: NavItem[] = [
       {
         href: "/population",
         label: "地域ダッシュボード",
-        alsoActiveFor: ["/area", "/trend", "/psychiatric"],
+        alsoActiveFor: ["/area", "/trend"],
+      },
+      {
+        href: "/population?tab=psychiatric",
+        label: "精神科医療",
+        alsoActiveFor: ["/psychiatric"],
       },
     ],
   },
 ];
 
-function findActiveHref(pathname: string, items: NavItem[]): string {
+/** href を pathname + クエリに分解。クエリは Record<string,string> */
+function splitHref(href: string): { pathname: string; query: Record<string, string> } {
+  const [pathname, queryStr = ""] = href.split("?");
+  const query: Record<string, string> = {};
+  for (const part of queryStr.split("&").filter(Boolean)) {
+    const [k, v] = part.split("=");
+    query[decodeURIComponent(k)] = decodeURIComponent(v ?? "");
+  }
+  return { pathname, query };
+}
+
+function findActiveHref(
+  pathname: string,
+  searchParams: URLSearchParams,
+  items: NavItem[],
+): string {
   const leaves: NavLeaf[] = [];
   for (const item of items) {
     if (isGroup(item)) leaves.push(...item.children);
     else leaves.push(item);
   }
   let active = "";
-  let activeMatchLen = 0;
+  let activeScore = -1;
+
   for (const leaf of leaves) {
-    if (leaf.href === "/") continue;
-    const pathsToCheck = [leaf.href, ...(leaf.alsoActiveFor ?? [])];
-    for (const path of pathsToCheck) {
-      const matches = pathname === path || pathname.startsWith(path + "/");
-      if (matches && path.length > activeMatchLen) {
+    const candidates = [leaf.href, ...(leaf.alsoActiveFor ?? [])];
+    for (const candidate of candidates) {
+      const { pathname: candPath, query: candQuery } = splitHref(candidate);
+      if (candPath === "/") continue;
+
+      // パス一致
+      const pathMatches =
+        pathname === candPath || pathname.startsWith(candPath + "/");
+      if (!pathMatches) continue;
+
+      // クエリ一致: 候補が指定するキーが全部現在のqueryと一致する必要あり
+      let queryMatches = true;
+      for (const [k, v] of Object.entries(candQuery)) {
+        if (searchParams.get(k) !== v) {
+          queryMatches = false;
+          break;
+        }
+      }
+      if (!queryMatches) continue;
+
+      // スコア: パス長 + クエリが多いほど優先（より具体的）
+      const score = candPath.length + Object.keys(candQuery).length * 100;
+      if (score > activeScore) {
         active = leaf.href;
-        activeMatchLen = path.length;
+        activeScore = score;
       }
     }
   }
+
   if (!active && pathname === "/") active = "/";
+
+  // /population でクエリ無し (tab未指定) → 地域ダッシュボードがactive。
+  // /population?tab=psychiatric → 精神科医療がactive。
+  // 上記ロジックで、クエリ指定有り候補が優先されるのでOK。
+  // ただし /population (クエリ無し) のとき、精神科医療 leaf は tab=psychiatric
+  // を要求するのでマッチせず、地域ダッシュボード leaf (クエリ要求無し) がマッチする。
   return active;
 }
 
@@ -73,8 +119,18 @@ function findActiveHref(pathname: string, items: NavItem[]): string {
  * モバイル: ハンバーガーでドロワー開閉
  */
 export function Navigation() {
+  // useSearchParams 使用のため Suspense でラップ
+  return (
+    <Suspense fallback={null}>
+      <NavigationInner />
+    </Suspense>
+  );
+}
+
+function NavigationInner() {
   const pathname = usePathname();
-  const activeHref = findActiveHref(pathname, navItems);
+  const searchParams = useSearchParams();
+  const activeHref = findActiveHref(pathname, searchParams, navItems);
   const [mobileOpen, setMobileOpen] = useState(false);
   const closeMobile = () => setMobileOpen(false);
 
