@@ -158,6 +158,45 @@ export async function fetchPopulationFutureAreas(): Promise<PopulationFutureArea
   return res.json();
 }
 
+export interface JmapIndexYear {
+  age0_14: number;
+  age15_39: number;
+  age40_64: number;
+  age65_74: number;
+  over75: number;
+  medicalDemandRaw: number;
+  nursingCareDemandRaw: number;
+  /** 2020年=100 とした医療需要指数 */
+  medicalIndex: number;
+  /** 2020年=100 とした介護需要指数 */
+  nursingCareIndex: number;
+}
+
+export interface JmapIndexData {
+  source: string;
+  sourceUrl?: string;
+  methodology: string;
+  methodologyUrl?: string;
+  baseYear: string;
+  years: string[];
+  formula: {
+    medical: string;
+    nursingCare: string;
+    index: string;
+  };
+  national: { years: Record<string, JmapIndexYear> };
+  prefectures: Record<string, { years: Record<string, JmapIndexYear> }>;
+  areas: Record<
+    string,
+    { name: string; prefecture: string; years: Record<string, JmapIndexYear> }
+  >;
+}
+
+export async function fetchJmapIndex(): Promise<JmapIndexData> {
+  const res = await fetch(`${BASE_PATH}/summary/jmap_index.json`);
+  return res.json();
+}
+
 /** 都道府県コード→名称（ソート済み配列） */
 export const PREFECTURE_LIST: [string, string][] = [
   ["01", "北海道"], ["02", "青森県"], ["03", "岩手県"], ["04", "宮城県"], ["05", "秋田県"],

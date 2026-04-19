@@ -5,10 +5,13 @@ import { useEffect, useState } from "react";
 import {
   fetchPopulationFuture,
   fetchPopulationFutureAreas,
+  fetchJmapIndex,
   PREFECTURE_NAMES,
   type PopulationFutureData,
   type PopulationFutureAreasData,
   type PopulationFutureYear,
+  type JmapIndexData,
+  type JmapIndexYear,
 } from "@/lib/data";
 import {
   fetchUtilizationRates,
@@ -46,6 +49,7 @@ export function FuturePopulationPanel({ prefCode, areaCode, title, diseaseCatego
   const [data, setData] = useState<PopulationFutureData | null>(null);
   const [areaData, setAreaData] = useState<PopulationFutureAreasData | null>(null);
   const [rates, setRates] = useState<UtilizationRates | null>(null);
+  const [jmap, setJmap] = useState<JmapIndexData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -53,6 +57,7 @@ export function FuturePopulationPanel({ prefCode, areaCode, title, diseaseCatego
     const fetchers: Promise<unknown>[] = [
       fetchPopulationFuture(),
       fetchUtilizationRates(),
+      fetchJmapIndex().catch(() => null),
     ];
     if (areaCode) {
       fetchers.push(fetchPopulationFutureAreas());
@@ -61,8 +66,9 @@ export function FuturePopulationPanel({ prefCode, areaCode, title, diseaseCatego
       .then((results) => {
         setData(results[0] as PopulationFutureData);
         setRates(results[1] as UtilizationRates);
+        setJmap(results[2] as JmapIndexData | null);
         if (areaCode) {
-          setAreaData(results[2] as PopulationFutureAreasData);
+          setAreaData(results[3] as PopulationFutureAreasData);
         }
         setLoading(false);
       })
@@ -164,6 +170,16 @@ export function FuturePopulationPanel({ prefCode, areaCode, title, diseaseCatego
     }
   }
 
+  // JMAP 医療介護需要予測指数（利用可能な場合のみ）
+  let jmapEnd: JmapIndexYear | null = null;
+  if (jmap) {
+    if (isAreaScope && areaCode && jmap.areas[areaCode]) {
+      jmapEnd = jmap.areas[areaCode].years[endYear] ?? null;
+    } else if (prefCode && jmap.prefectures[prefCode]) {
+      jmapEnd = jmap.prefectures[prefCode].years[endYear] ?? null;
+    }
+  }
+
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <div className="mb-4 flex items-start justify-between">
@@ -244,9 +260,61 @@ export function FuturePopulationPanel({ prefCode, areaCode, title, diseaseCatego
         </div>
       )}
 
+      {jmapEnd && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <DemandIndexBox
+            label="医療需要予測指数"
+            value={jmapEnd.medicalIndex}
+            description={`${baseYear}年=100 基準 / ${endYear}年時点`}
+            color="blue"
+          />
+          <DemandIndexBox
+            label="介護需要予測指数"
+            value={jmapEnd.nursingCareIndex}
+            description={`${baseYear}年=100 基準 / ${endYear}年時点`}
+            color="red"
+          />
+        </div>
+      )}
+
       <p className="mt-3 text-xs text-gray-400">
         ※ 75歳以上は一人当たり入院受療率が他年齢層より顕著に高く、病床需要の中核指標です。
+        {jmapEnd && (
+          <>
+            {" "}需要指数は日本医師会 JMAP 方式（年齢階級別重み付け、2020年=100）。
+          </>
+        )}
       </p>
+    </div>
+  );
+}
+
+interface DemandIndexBoxProps {
+  label: string;
+  value: number;
+  description: string;
+  color: "blue" | "red";
+}
+
+function DemandIndexBox({ label, value, description, color }: DemandIndexBoxProps) {
+  // 100を基準に +/- 表示
+  const delta = value - 100;
+  const up = delta > 0;
+  const down = delta < 0;
+  const border = color === "blue" ? "border-blue-200 bg-blue-50" : "border-red-200 bg-red-50";
+  const labelCol = color === "blue" ? "text-blue-900" : "text-red-900";
+  const descCol = color === "blue" ? "text-blue-700" : "text-red-700";
+  const deltaCol = up ? "text-red-600" : down ? "text-blue-600" : "text-gray-500";
+  return (
+    <div className={`rounded-md border p-3 ${border}`}>
+      <p className={`text-xs ${labelCol}`}>{label}</p>
+      <p className="mt-1 text-2xl font-bold text-gray-900">
+        {value.toFixed(1)}
+        <span className={`ml-2 text-sm font-medium ${deltaCol}`}>
+          ({delta > 0 ? "+" : ""}{delta.toFixed(1)})
+        </span>
+      </p>
+      <p className={`mt-0.5 text-[11px] ${descCol}`}>{description}</p>
     </div>
   );
 }

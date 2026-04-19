@@ -12,13 +12,19 @@ import {
   type PatientForecastPoint,
 } from "@/components/charts/patient-forecast-chart";
 import {
+  DemandIndexChart,
+  type DemandIndexPoint,
+} from "@/components/charts/demand-index-chart";
+import {
   fetchPopulationFuture,
   fetchPopulationFutureAreas,
+  fetchJmapIndex,
   PREFECTURE_LIST,
   PREFECTURE_NAMES,
   type PopulationFutureData,
   type PopulationFutureAreasData,
   type PopulationFutureYear,
+  type JmapIndexData,
 } from "@/lib/data";
 import {
   fetchUtilizationRates,
@@ -74,6 +80,7 @@ function PopulationPageInner() {
   const [data, setData] = useState<PopulationFutureData | null>(null);
   const [areaData, setAreaData] = useState<PopulationFutureAreasData | null>(null);
   const [rates, setRates] = useState<UtilizationRates | null>(null);
+  const [jmap, setJmap] = useState<JmapIndexData | null>(null);
   const [scope, setScope] = useState<Scope>(initialScope);
   // area: scope の場合は、その構想区域の都道府県を初期フィルタにする
   const [areaPrefFilter, setAreaPrefFilter] = useState<string>("");
@@ -86,11 +93,13 @@ function PopulationPageInner() {
       fetchPopulationFuture(),
       fetchPopulationFutureAreas(),
       fetchUtilizationRates(),
+      fetchJmapIndex().catch(() => null),
     ])
-      .then(([d, a, r]) => {
+      .then(([d, a, r, j]) => {
         setData(d);
         setAreaData(a);
         setRates(r);
+        setJmap(j);
         // area スコープの場合は、対応する都道府県をフィルタに設定
         if (initialScope.startsWith("area:")) {
           const code = initialScope.slice(5);
@@ -131,6 +140,29 @@ function PopulationPageInner() {
     if (!selected) return [];
     return toTrendPoints(selected.years);
   }, [selected]);
+
+  // JMAP 医療・介護需要予測指数
+  const demandIndexPoints: DemandIndexPoint[] = useMemo(() => {
+    if (!jmap) return [];
+    let years: Record<string, { medicalIndex: number; nursingCareIndex: number }> | null = null;
+    if (scope === "national") {
+      years = jmap.national.years;
+    } else if (scope.startsWith("pref:")) {
+      const code = scope.slice(5);
+      years = jmap.prefectures[code]?.years ?? null;
+    } else if (scope.startsWith("area:")) {
+      const code = scope.slice(5);
+      years = jmap.areas[code]?.years ?? null;
+    }
+    if (!years) return [];
+    return Object.entries(years)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([year, y]) => ({
+        year,
+        medicalIndex: y.medicalIndex,
+        nursingCareIndex: y.nursingCareIndex,
+      }));
+  }, [jmap, scope]);
 
   // 将来患者数推計
   const forecastSeries = useMemo(() => {
@@ -351,6 +383,71 @@ function PopulationPageInner() {
               75歳以上は一人当たり入院受療率が他の年齢層より顕著に高く、病床需要の中核指標です。
             </p>
           </div>
+
+          {/* 医療・介護需要予測指数 (JMAP) */}
+          {demandIndexPoints.length > 0 && (() => {
+            const last = demandIndexPoints[demandIndexPoints.length - 1];
+            const peakMed = demandIndexPoints.reduce((a, b) =>
+              b.medicalIndex > a.medicalIndex ? b : a
+            );
+            const peakNur = demandIndexPoints.reduce((a, b) =>
+              b.nursingCareIndex > a.nursingCareIndex ? b : a
+            );
+            return (
+              <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h2 className="text-lg font-semibold">
+                      医療・介護需要予測指数
+                      {scope !== "national" && selected && ` - ${selected.name}`}
+                    </h2>
+                    <p className="mt-1 text-xs text-gray-400">
+                      日本医師会 JMAP 方式（2020年=100）/ 年齢階級別の重み付けで医療・介護需要の相対変化を指数化
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mb-4 grid gap-3 sm:grid-cols-4">
+                  <div className="rounded-md border border-blue-200 bg-blue-50 p-3">
+                    <p className="text-xs text-blue-900">{last.year}年 医療需要指数</p>
+                    <p className="mt-1 text-2xl font-bold text-gray-900">
+                      {last.medicalIndex.toFixed(1)}
+                      <span className={`ml-2 text-sm ${last.medicalIndex > 100 ? "text-red-600" : "text-blue-600"}`}>
+                        ({last.medicalIndex > 100 ? "+" : ""}{(last.medicalIndex - 100).toFixed(1)})
+                      </span>
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-blue-700">ピーク: {peakMed.year}年 {peakMed.medicalIndex.toFixed(1)}</p>
+                  </div>
+                  <div className="rounded-md border border-red-200 bg-red-50 p-3">
+                    <p className="text-xs text-red-900">{last.year}年 介護需要指数</p>
+                    <p className="mt-1 text-2xl font-bold text-gray-900">
+                      {last.nursingCareIndex.toFixed(1)}
+                      <span className={`ml-2 text-sm ${last.nursingCareIndex > 100 ? "text-red-600" : "text-blue-600"}`}>
+                        ({last.nursingCareIndex > 100 ? "+" : ""}{(last.nursingCareIndex - 100).toFixed(1)})
+                      </span>
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-red-700">ピーク: {peakNur.year}年 {peakNur.nursingCareIndex.toFixed(1)}</p>
+                  </div>
+                  <div className="col-span-2 rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-xs text-gray-500">算出式</p>
+                    <p className="mt-1 text-[11px] text-gray-700 leading-relaxed">
+                      医療需要 = 0-14×0.6 + 15-39×0.4 + 40-64×1.0 + 65-74×<span className="font-semibold">2.3</span> + 75+×<span className="font-semibold">3.9</span>
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-gray-700 leading-relaxed">
+                      介護需要 = 40-64×1.0 + 65-74×9.7 + 75+×<span className="font-semibold text-red-600">87.3</span>
+                    </p>
+                  </div>
+                </div>
+
+                <DemandIndexChart data={demandIndexPoints} height={340} />
+
+                <p className="mt-3 text-xs text-gray-400">
+                  ※ 医療需要は高齢化でゆるやかに上昇する一方、介護需要は75歳以上の急増で大きく伸びる傾向。
+                  指数が100を下回る場合は、総人口減少が年齢構成変化を上回って需要そのものが縮小することを意味します。
+                </p>
+              </div>
+            );
+          })()}
 
           {/* 将来患者数推計 */}
           {rates && forecastPoints.length > 0 && (() => {
