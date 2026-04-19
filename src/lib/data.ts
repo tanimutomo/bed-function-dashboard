@@ -250,6 +250,34 @@ export async function fetchMedicalResources(): Promise<MedicalResourcesData> {
   return res.json();
 }
 
+export interface KaigoResourceEntry {
+  facilities: {
+    specialCare: number;    // 介護老人福祉施設 (特養)
+    healthCare: number;     // 介護老人保健施設 (老健)
+    medicalCare: number;    // 介護医療院
+    total: number;          // 3施設合計
+  };
+  specialCareCapacity: number;  // 特養の定員(人)
+  staff: {
+    specialCare: number;    // 特養の従事者数
+    healthCare: number;     // 老健の従事者数
+  };
+}
+
+export interface KaigoResourcesData {
+  source: string;
+  sourceUrl?: string;
+  year: string;
+  definitions: Record<string, string>;
+  national: KaigoResourceEntry;
+  prefectures: Record<string, KaigoResourceEntry>;
+}
+
+export async function fetchKaigoResources(): Promise<KaigoResourcesData> {
+  const res = await fetch(`${BASE_PATH}/summary/kaigo_resources.json`);
+  return res.json();
+}
+
 /** 都道府県コード→名称（ソート済み配列） */
 export const PREFECTURE_LIST: [string, string][] = [
   ["01", "北海道"], ["02", "青森県"], ["03", "岩手県"], ["04", "宮城県"], ["05", "秋田県"],

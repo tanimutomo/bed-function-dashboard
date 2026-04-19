@@ -20,6 +20,7 @@ import {
   fetchPopulationFutureAreas,
   fetchJmapIndex,
   fetchMedicalResources,
+  fetchKaigoResources,
   PREFECTURE_LIST,
   PREFECTURE_NAMES,
   type PopulationFutureData,
@@ -28,6 +29,8 @@ import {
   type JmapIndexData,
   type MedicalResourcesData,
   type MedicalResourceEntry,
+  type KaigoResourcesData,
+  type KaigoResourceEntry,
 } from "@/lib/data";
 import {
   fetchUtilizationRates,
@@ -85,6 +88,7 @@ function PopulationPageInner() {
   const [rates, setRates] = useState<UtilizationRates | null>(null);
   const [jmap, setJmap] = useState<JmapIndexData | null>(null);
   const [resources, setResources] = useState<MedicalResourcesData | null>(null);
+  const [kaigo, setKaigo] = useState<KaigoResourcesData | null>(null);
   const [scope, setScope] = useState<Scope>(initialScope);
   // area: scope の場合は、その構想区域の都道府県を初期フィルタにする
   const [areaPrefFilter, setAreaPrefFilter] = useState<string>("");
@@ -99,13 +103,15 @@ function PopulationPageInner() {
       fetchUtilizationRates(),
       fetchJmapIndex().catch(() => null),
       fetchMedicalResources().catch(() => null),
+      fetchKaigoResources().catch(() => null),
     ])
-      .then(([d, a, r, j, res]) => {
+      .then(([d, a, r, j, res, kai]) => {
         setData(d);
         setAreaData(a);
         setRates(r);
         setJmap(j);
         setResources(res);
+        setKaigo(kai);
         // area スコープの場合は、対応する都道府県をフィルタに設定
         if (initialScope.startsWith("area:")) {
           const code = initialScope.slice(5);
@@ -163,6 +169,37 @@ function PopulationPageInner() {
     return null;
   }, [resources, scope, areaData]);
   const resourceScopeIsArea = scope.startsWith("area:");
+
+  // 介護リソース (都道府県単位のみ。構想区域時は所属都道府県の値を流用)
+  const kaigoEntry: KaigoResourceEntry | null = useMemo(() => {
+    if (!kaigo) return null;
+    if (scope === "national") return kaigo.national;
+    if (scope.startsWith("pref:")) {
+      return kaigo.prefectures[scope.slice(5)] ?? null;
+    }
+    if (scope.startsWith("area:") && areaData) {
+      const code = scope.slice(5);
+      const pref = areaData.areas[code]?.prefecture;
+      if (pref) return kaigo.prefectures[pref] ?? null;
+    }
+    return null;
+  }, [kaigo, scope, areaData]);
+
+  // 都道府県・全国の75歳以上人口を取得（75+1千人あたりの介護施設数を計算するため）
+  const over75PopForResources: number = useMemo(() => {
+    if (!data) return 0;
+    if (scope === "national") return data.national.years["2020"]?.over75 ?? 0;
+    if (scope.startsWith("pref:")) {
+      const code = scope.slice(5);
+      return data.prefectures[code]?.years["2020"]?.over75 ?? 0;
+    }
+    if (scope.startsWith("area:") && areaData) {
+      const code = scope.slice(5);
+      const pref = areaData.areas[code]?.prefecture;
+      if (pref) return data.prefectures[pref]?.years["2020"]?.over75 ?? 0;
+    }
+    return 0;
+  }, [data, scope, areaData]);
 
   // JMAP 医療・介護需要予測指数
   const demandIndexPoints: DemandIndexPoint[] = useMemo(() => {
@@ -651,6 +688,93 @@ function PopulationPageInner() {
             </div>
           )}
 
+          {/* 介護リソース (令和5年 介護サービス施設・事業所調査) */}
+          {kaigoEntry && kaigo && (() => {
+            // 75+ 1千人あたりの施設数 (JMAP風指標)
+            const nat75 = data.national.years["2020"]?.over75 ?? 0;
+            const natPer1k = (metric: number) =>
+              nat75 > 0 ? (metric / (nat75 / 1000)) : 0;
+            const localPer1k = (metric: number) =>
+              over75PopForResources > 0 ? (metric / (over75PopForResources / 1000)) : 0;
+
+            return (
+              <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h2 className="text-lg font-semibold">
+                      介護保険施設 (入所系)
+                      {scope !== "national" && selected && ` - ${resourceScopeIsArea && areaData && scope.startsWith("area:") ? (PREFECTURE_NAMES[areaData.areas[scope.slice(5)]?.prefecture ?? ""] ?? "") : selected.name}`}
+                    </h2>
+                    <p className="mt-1 text-xs text-gray-400">
+                      {kaigo.source} / 施設数は75歳以上1千人あたりで全国平均と比較
+                      {resourceScopeIsArea && " ※構想区域別データは無いため、所属都道府県の値を表示"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <KaigoBox
+                    label="介護老人福祉施設 (特養)"
+                    total={kaigoEntry.facilities.specialCare}
+                    per1k={localPer1k(kaigoEntry.facilities.specialCare)}
+                    national={natPer1k(kaigo.national.facilities.specialCare)}
+                  />
+                  <KaigoBox
+                    label="介護老人保健施設 (老健)"
+                    total={kaigoEntry.facilities.healthCare}
+                    per1k={localPer1k(kaigoEntry.facilities.healthCare)}
+                    national={natPer1k(kaigo.national.facilities.healthCare)}
+                  />
+                  <KaigoBox
+                    label="介護医療院"
+                    total={kaigoEntry.facilities.medicalCare}
+                    per1k={localPer1k(kaigoEntry.facilities.medicalCare)}
+                    national={natPer1k(kaigo.national.facilities.medicalCare)}
+                  />
+                  <KaigoBox
+                    label="3施設合計"
+                    total={kaigoEntry.facilities.total}
+                    per1k={localPer1k(kaigoEntry.facilities.total)}
+                    national={natPer1k(kaigo.national.facilities.total)}
+                    highlight
+                  />
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-xs text-gray-500">特養 定員</p>
+                    <p className="mt-1 text-xl font-bold text-gray-900">
+                      {kaigoEntry.specialCareCapacity.toLocaleString()}
+                      <span className="ml-1 text-sm font-normal text-gray-500">人</span>
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-gray-500">
+                      75歳以上1千人あたり {localPer1k(kaigoEntry.specialCareCapacity).toFixed(1)}人
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-xs text-gray-500">特養 従事者数</p>
+                    <p className="mt-1 text-xl font-bold text-gray-900">
+                      {kaigoEntry.staff.specialCare.toLocaleString()}
+                      <span className="ml-1 text-sm font-normal text-gray-500">人</span>
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-xs text-gray-500">老健 従事者数</p>
+                    <p className="mt-1 text-xl font-bold text-gray-900">
+                      {kaigoEntry.staff.healthCare.toLocaleString()}
+                      <span className="ml-1 text-sm font-normal text-gray-500">人</span>
+                    </p>
+                  </div>
+                </div>
+
+                <p className="mt-3 text-xs text-gray-400">
+                  ※ 介護保険施設は医療需要の一部を代替する役割があり、供給量が少ない地域では病院の療養病床への需要が高まる傾向。
+                  75歳以上1千人あたり施設数で全国平均と比較しています。
+                </p>
+              </div>
+            );
+          })()}
+
           {/* 年次テーブル */}
           <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold">年次別推計値</h2>
@@ -775,6 +899,46 @@ function ResourceBox({ label, total, per100k, national, unit }: ResourceBoxProps
       <p className="mt-0.5 text-[11px] text-gray-700">
         総数 {total.toLocaleString()}
         {unit}
+      </p>
+      {national > 0 && (
+        <p className={`mt-0.5 text-[11px] ${deltaCol}`}>
+          全国平均 {national.toFixed(1)} ({deltaPct > 0 ? "+" : ""}{deltaPct.toFixed(1)}%)
+        </p>
+      )}
+    </div>
+  );
+}
+
+interface KaigoBoxProps {
+  label: string;
+  total: number;
+  per1k: number;
+  national: number;
+  highlight?: boolean;
+}
+
+function KaigoBox({ label, total, per1k, national, highlight }: KaigoBoxProps) {
+  const delta = national > 0 ? per1k - national : 0;
+  const deltaPct = national > 0 ? ((per1k - national) / national) * 100 : 0;
+  const aboveNatl = delta > 0;
+  const belowNatl = delta < 0;
+  const border = highlight
+    ? "border-amber-300 bg-amber-50"
+    : aboveNatl
+      ? "border-red-200 bg-red-50"
+      : belowNatl
+        ? "border-blue-200 bg-blue-50"
+        : "border-gray-200 bg-gray-50";
+  const deltaCol = aboveNatl ? "text-red-600" : belowNatl ? "text-blue-600" : "text-gray-500";
+  return (
+    <div className={`rounded-md border p-3 ${border}`}>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="mt-1 text-xl font-bold text-gray-900">
+        {per1k.toFixed(1)}
+        <span className="ml-1 text-xs font-normal text-gray-500">/75+1千人</span>
+      </p>
+      <p className="mt-0.5 text-[11px] text-gray-700">
+        総数 {total.toLocaleString()}施設
       </p>
       {national > 0 && (
         <p className={`mt-0.5 text-[11px] ${deltaCol}`}>
