@@ -7,6 +7,8 @@ import { useState } from "react";
 interface NavLeaf {
   href: string;
   label: string;
+  /** 互換性のために他のパスでも active 扱いとするエイリアス */
+  alsoActiveFor?: string[];
 }
 
 interface NavGroup {
@@ -31,13 +33,9 @@ const navItems: NavItem[] = [
     ],
   },
   {
+    href: "/population",
     label: "地域",
-    children: [
-      { href: "/area", label: "構想区域" },
-      { href: "/population", label: "人口動態・将来推計" },
-      { href: "/trend", label: "経年トレンド" },
-      { href: "/psychiatric", label: "精神科医療の状況" },
-    ],
+    alsoActiveFor: ["/area", "/trend", "/psychiatric"],
   },
 ];
 
@@ -51,10 +49,17 @@ function findActiveHref(pathname: string, items: NavItem[]): string {
     else leaves.push(item);
   }
   let active = "";
+  let activeMatchLen = 0;
   for (const leaf of leaves) {
     if (leaf.href === "/") continue;
-    const matches = pathname === leaf.href || pathname.startsWith(leaf.href + "/");
-    if (matches && leaf.href.length > active.length) active = leaf.href;
+    const pathsToCheck = [leaf.href, ...(leaf.alsoActiveFor ?? [])];
+    for (const path of pathsToCheck) {
+      const matches = pathname === path || pathname.startsWith(path + "/");
+      if (matches && path.length > activeMatchLen) {
+        active = leaf.href;
+        activeMatchLen = path.length;
+      }
+    }
   }
   if (!active && pathname === "/") active = "/";
   return active;

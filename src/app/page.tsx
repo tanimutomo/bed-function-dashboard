@@ -129,14 +129,14 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* 何から見ますか? セクション (3カード) */}
+      {/* 何から見ますか? セクション (2カード) */}
       <section className="mb-10">
         <h2 className="mb-4 text-base font-semibold text-gray-700">何から見ますか?</h2>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2">
           {/* 自病院を調べる */}
           <HubCard
             title="自病院を調べる"
-            description="病院ごとのカルテで診療実績・病床機能・職員構成を確認"
+            description="病院ごとのカルテで診療実績・病床機能・職員構成を確認。一般病院と精神科病院で別々のカルテ構造。"
             icon="🏥"
             primaryActions={[
               { href: "/hospital", label: "一般病院" },
@@ -144,29 +144,15 @@ export default function HomePage() {
             ]}
             subLinks={[{ href: "/ranking", label: "診療実績ランキング" }]}
           />
-          {/* 地域の状況を知る */}
+          {/* 地域を見る (統合) */}
           <HubCard
-            title="地域の状況を知る"
-            description="構想区域・都道府県ごとの医療供給と、精神科医療の現状"
+            title="地域を見る"
+            description="都道府県 or 構想区域を選ぶと、人口動態・将来推計・医療介護リソース・経年トレンド・精神科医療を一画面で横断的に確認できます。"
             icon="📍"
-            primaryActions={[
-              { href: "/area", label: "構想区域" },
-              { href: "/psychiatric", label: "精神科医療の状況" },
-            ]}
+            primaryActions={[{ href: "/population", label: "地域ダッシュボード" }]}
             subLinks={[
-              { href: "/trend", label: "経年トレンド" },
               { href: "/", label: "全国俯瞰（下にスクロール）", isScroll: true },
             ]}
-          />
-          {/* 将来を予測する */}
-          <HubCard
-            title="将来を予測する"
-            description="2050年までの推計人口・患者数・医療介護需要指数"
-            icon="🔮"
-            primaryActions={[
-              { href: "/population", label: "人口動態・将来推計" },
-            ]}
-            subLinks={[{ href: "/trend", label: "経年トレンド" }]}
           />
         </div>
       </section>

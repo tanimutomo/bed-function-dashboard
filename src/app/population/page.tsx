@@ -1,7 +1,20 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 import { KpiCard } from "@/components/ui/kpi-card";
 import {
   PopulationTrendChart,
@@ -21,6 +34,10 @@ import {
   fetchJmapIndex,
   fetchMedicalResources,
   fetchKaigoResources,
+  fetchNationalSummary,
+  fetchPrefectureSummary,
+  fetchHospitalReport,
+  fetch630Summary,
   PREFECTURE_LIST,
   PREFECTURE_NAMES,
   type PopulationFutureData,
@@ -31,12 +48,45 @@ import {
   type MedicalResourceEntry,
   type KaigoResourcesData,
   type KaigoResourceEntry,
+  type HospitalReportEntry,
 } from "@/lib/data";
 import {
   fetchUtilizationRates,
   forecastPatientSeries,
   type UtilizationRates,
 } from "@/lib/patient-forecast";
+import type { NationalSummary } from "@/types";
+
+type Tab = "dashboard" | "psychiatric";
+
+// 精神科ページから流用
+interface PsychPrefData {
+  prefCode: string;
+  prefName: string;
+  overview: { hospitals: number; beds: number; psychiatricOnlyHospitals: number; psychiatricOnlyBeds: number };
+  admissionTypes: { involuntary: number; medicalProtection: number; voluntary: number; total: number; openWard: number; closedWard: number };
+  diseases: Record<string, number>;
+  lengthOfStay: { under3months: number; months3to12: number; over1year: number };
+}
+interface PsychSummary {
+  national: PsychPrefData;
+  prefectures: Record<string, PsychPrefData>;
+}
+
+const DISEASE_LABELS: Record<string, string> = {
+  F0_dementia: "認知症 (F0)",
+  F1_substance: "物質使用障害 (F1)",
+  F2_schizophrenia: "統合失調症 (F2)",
+  F3_mood: "気分障害 (F3)",
+  F4_neurotic: "神経症 (F4)",
+  F7_intellectual: "知的障害 (F7)",
+};
+const DISEASE_COLORS = ["#ef4444", "#f97316", "#3b82f6", "#22c55e", "#a855f7", "#06b6d4", "#6b7280"];
+const ADMISSION_COLORS = {
+  voluntary: "#22c55e",
+  medicalProtection: "#f97316",
+  involuntary: "#ef4444",
+};
 
 /** scope は "national" / "pref:<code>" / "area:<code>" 形式 */
 type Scope = string;
@@ -78,10 +128,14 @@ export default function PopulationPage() {
 
 function PopulationPageInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   // URL query: ?scope=area:<code> or pref:<code> or national
   //            &disease=<category>
+  //            &tab=dashboard | psychiatric
   const initialScope: Scope = searchParams.get("scope") ?? "national";
   const initialDisease = searchParams.get("disease") ?? "overall";
+  const initialTab: Tab = searchParams.get("tab") === "psychiatric" ? "psychiatric" : "dashboard";
 
   const [data, setData] = useState<PopulationFutureData | null>(null);
   const [areaData, setAreaData] = useState<PopulationFutureAreasData | null>(null);
@@ -89,7 +143,16 @@ function PopulationPageInner() {
   const [jmap, setJmap] = useState<JmapIndexData | null>(null);
   const [resources, setResources] = useState<MedicalResourcesData | null>(null);
   const [kaigo, setKaigo] = useState<KaigoResourcesData | null>(null);
+  // 経年トレンド用
+  const [nationalBedSummary, setNationalBedSummary] = useState<NationalSummary[]>([]);
+  const [prefBedSummary, setPrefBedSummary] = useState<Record<string, NationalSummary[]>>({});
+  const [hospReport, setHospReport] = useState<
+    Record<string, { national: HospitalReportEntry; prefectures: Record<string, HospitalReportEntry> }>
+  >({});
+  // 精神科用
+  const [psychSummary, setPsychSummary] = useState<PsychSummary | null>(null);
   const [scope, setScope] = useState<Scope>(initialScope);
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   // area: scope の場合は、その構想区域の都道府県を初期フィルタにする
   const [areaPrefFilter, setAreaPrefFilter] = useState<string>("");
   const [forecastKind, setForecastKind] = useState<"inpatient" | "outpatient">("inpatient");
@@ -104,14 +167,22 @@ function PopulationPageInner() {
       fetchJmapIndex().catch(() => null),
       fetchMedicalResources().catch(() => null),
       fetchKaigoResources().catch(() => null),
+      fetchNationalSummary().catch(() => []),
+      fetchPrefectureSummary().catch(() => ({})),
+      fetchHospitalReport().catch(() => ({ source: "", years: {} })),
+      fetch630Summary().catch(() => null),
     ])
-      .then(([d, a, r, j, res, kai]) => {
+      .then(([d, a, r, j, res, kai, natBeds, prefBeds, hr, psych]) => {
         setData(d);
         setAreaData(a);
         setRates(r);
         setJmap(j);
         setResources(res);
         setKaigo(kai);
+        setNationalBedSummary(natBeds);
+        setPrefBedSummary(prefBeds);
+        setHospReport(hr.years ?? {});
+        setPsychSummary(psych);
         // area スコープの場合は、対応する都道府県をフィルタに設定
         if (initialScope.startsWith("area:")) {
           const code = initialScope.slice(5);
@@ -124,6 +195,16 @@ function PopulationPageInner() {
     // 依存は空配列: 初期化は1度だけ
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // タブ切替時にURL同期
+  const switchTab = (tab: Tab) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === "psychiatric") params.set("tab", "psychiatric");
+    else params.delete("tab");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   const selected = useMemo(() => {
     if (!data) return null;
@@ -184,6 +265,64 @@ function PopulationPageInner() {
     }
     return null;
   }, [kaigo, scope, areaData]);
+
+  // 経年トレンド用: スコープに応じた都道府県コード or null(全国)
+  const trendPrefCode: string | null = useMemo(() => {
+    if (scope === "national") return null;
+    if (scope.startsWith("pref:")) return scope.slice(5);
+    if (scope.startsWith("area:") && areaData) {
+      const code = scope.slice(5);
+      const pref = areaData.areas[code]?.prefecture;
+      return pref ?? null;
+    }
+    return null;
+  }, [scope, areaData]);
+
+  // 精神科データ (都道府県 or 全国)
+  const psychData: PsychPrefData | null = useMemo(() => {
+    if (!psychSummary) return null;
+    if (!trendPrefCode) return psychSummary.national;
+    return psychSummary.prefectures[trendPrefCode] ?? null;
+  }, [psychSummary, trendPrefCode]);
+
+  const psychDiseaseChart = useMemo(() => {
+    if (!psychData?.diseases) return [];
+    const d = psychData.diseases;
+    const keys = ["F2_schizophrenia", "F0_dementia", "F3_mood", "F1_substance", "F4_neurotic", "F7_intellectual"];
+    const otherTotal = (d.total || 0) - keys.reduce((s, k) => s + (d[k] || 0), 0);
+    return [
+      ...keys.map((k) => ({ name: DISEASE_LABELS[k] || k, value: d[k] || 0 })),
+      { name: "その他", value: Math.max(0, otherTotal) },
+    ].filter((i) => i.value > 0);
+  }, [psychData]);
+
+  const psychAdmissionChart = useMemo(() => {
+    if (!psychData?.admissionTypes) return [];
+    const a = psychData.admissionTypes;
+    return [
+      { name: "任意入院", value: a.voluntary, color: ADMISSION_COLORS.voluntary },
+      { name: "医療保護入院", value: a.medicalProtection, color: ADMISSION_COLORS.medicalProtection },
+      { name: "措置入院", value: a.involuntary, color: ADMISSION_COLORS.involuntary },
+    ].filter((i) => i.value > 0);
+  }, [psychData]);
+
+  const psychLosChart = useMemo(() => {
+    if (!psychData?.lengthOfStay) return [];
+    const l = psychData.lengthOfStay;
+    return [
+      { name: "3ヶ月未満", value: l.under3months },
+      { name: "3〜12ヶ月", value: l.months3to12 },
+      { name: "1年以上", value: l.over1year },
+    ];
+  }, [psychData]);
+
+  // 経年トレンド用データ: 病床機能の時系列
+  const trendBedData = useMemo(() => {
+    const raw = trendPrefCode ? (prefBedSummary[trendPrefCode] ?? []) : nationalBedSummary;
+    return raw.filter(
+      (d) => d.totalBeds > 0 && Object.values(d.bedsByFunction).some((v) => v > 0),
+    );
+  }, [trendPrefCode, nationalBedSummary, prefBedSummary]);
 
   // 都道府県・全国の75歳以上人口を取得（75+1千人あたりの介護施設数を計算するため）
   const over75PopForResources: number = useMemo(() => {
@@ -305,9 +444,9 @@ function PopulationPageInner() {
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">人口動態・将来推計</h1>
+          <h1 className="text-2xl font-bold">地域ダッシュボード</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {data.source}
+            都道府県または構想区域を選択して、人口動態・医療資源・将来推計・経年トレンドを一画面で確認
           </p>
           <p className="mt-0.5 text-xs text-gray-400">
             基準年 {data.baseYear} 年 / 推計期間 {years[0] ?? "-"}〜
@@ -368,6 +507,33 @@ function PopulationPageInner() {
         </div>
       </div>
 
+      {/* タブ切替 */}
+      <div className="mb-6 flex items-end gap-1 border-b border-gray-200">
+        <button
+          onClick={() => switchTab("dashboard")}
+          className={`rounded-t-md px-4 py-2 text-sm font-medium transition ${
+            activeTab === "dashboard"
+              ? "border-b-2 border-blue-600 bg-blue-50 text-blue-900"
+              : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+          }`}
+        >
+          地域ダッシュボード
+        </button>
+        <button
+          onClick={() => switchTab("psychiatric")}
+          className={`rounded-t-md px-4 py-2 text-sm font-medium transition ${
+            activeTab === "psychiatric"
+              ? "border-b-2 border-blue-600 bg-blue-50 text-blue-900"
+              : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+          }`}
+        >
+          精神科医療
+          <span className="ml-1.5 text-[10px] text-gray-400">別データソース (630調査)</span>
+        </button>
+      </div>
+
+      {activeTab === "dashboard" && (
+        <>
       {/* 解説 */}
       <div className="mb-6 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
         <p className="font-medium">なぜ人口動態が経営戦略に重要か</p>
@@ -908,6 +1074,126 @@ function PopulationPageInner() {
         </>
       )}
 
+      {/* 経年トレンド (病床機能・病床利用率) — 全国または都道府県単位 */}
+      {trendBedData.length > 0 && (
+        <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">
+              経年トレンド
+              {scope !== "national" && selected && ` - ${scope.startsWith("area:") ? (areaData && scope.startsWith("area:") ? PREFECTURE_NAMES[areaData.areas[scope.slice(5)]?.prefecture ?? ""] ?? "" : selected.name) : selected.name}`}
+            </h2>
+            <p className="mt-1 text-xs text-gray-400">
+              病床機能の時系列変化と病床利用率の推移（{scope.startsWith("area:") ? "都道府県単位データのみ表示" : "病床機能報告 / 病院報告"}）
+            </p>
+          </div>
+
+          <div className="mb-4 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+            <span className="font-medium">このセクションで見えるもの：</span>
+            過去5年で地域の病床機能がどう動いたか。急性期の減少、回復期の増加は地域医療構想の進捗を示すシグナル。
+          </div>
+
+          {/* 病床機能推移 */}
+          <h3 className="mb-2 text-sm font-medium text-gray-700">機能別病床数の推移</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-gray-500">
+                  <th className="py-2 pr-4">年度</th>
+                  <th className="py-2 pr-4 text-right">高度急性期</th>
+                  <th className="py-2 pr-4 text-right">急性期</th>
+                  <th className="py-2 pr-4 text-right">回復期</th>
+                  <th className="py-2 pr-4 text-right">慢性期</th>
+                  <th className="py-2 text-right">合計</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trendBedData.map((d, i) => {
+                  const prev = i > 0 ? trendBedData[i - 1] : null;
+                  const diffStr = (cur: number, prevVal: number | undefined) => {
+                    if (prevVal == null || prevVal === 0) return "";
+                    const diff = cur - prevVal;
+                    const rate = ((diff / prevVal) * 100).toFixed(1);
+                    return diff > 0 ? ` (+${rate}%)` : ` (${rate}%)`;
+                  };
+                  return (
+                    <tr key={d.year} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-2 pr-4 font-medium">{d.year}年度</td>
+                      <td className="py-2 pr-4 text-right">
+                        {d.bedsByFunction.high_acute.toLocaleString()}
+                        {prev && <span className="text-xs text-gray-400">{diffStr(d.bedsByFunction.high_acute, prev.bedsByFunction.high_acute)}</span>}
+                      </td>
+                      <td className="py-2 pr-4 text-right">
+                        {d.bedsByFunction.acute.toLocaleString()}
+                        {prev && <span className="text-xs text-gray-400">{diffStr(d.bedsByFunction.acute, prev.bedsByFunction.acute)}</span>}
+                      </td>
+                      <td className="py-2 pr-4 text-right">
+                        {d.bedsByFunction.recovery.toLocaleString()}
+                        {prev && <span className="text-xs text-gray-400">{diffStr(d.bedsByFunction.recovery, prev.bedsByFunction.recovery)}</span>}
+                      </td>
+                      <td className="py-2 pr-4 text-right">
+                        {d.bedsByFunction.chronic.toLocaleString()}
+                        {prev && <span className="text-xs text-gray-400">{diffStr(d.bedsByFunction.chronic, prev.bedsByFunction.chronic)}</span>}
+                      </td>
+                      <td className="py-2 text-right font-medium">
+                        {d.totalBeds.toLocaleString()}
+                        {prev && <span className="text-xs text-gray-400">{diffStr(d.totalBeds, prev.totalBeds)}</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 病床利用率推移 */}
+          {Object.keys(hospReport).length > 0 && (
+            <>
+              <h3 className="mb-2 mt-6 text-sm font-medium text-gray-700">
+                病床利用率・平均在院日数の推移
+                <span className="ml-2 text-[11px] font-normal text-gray-400">(病院報告)</span>
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-left text-gray-500">
+                      <th className="py-2 pr-4">年</th>
+                      <th className="py-2 pr-4 text-right">利用率(全体)</th>
+                      <th className="py-2 pr-4 text-right">一般</th>
+                      <th className="py-2 pr-4 text-right">療養</th>
+                      <th className="py-2 pr-4 text-right">精神</th>
+                      <th className="py-2 pr-4 text-right">平均在院(全体)</th>
+                      <th className="py-2 text-right">一般</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(hospReport)
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([year, datum]) => {
+                        const entry = trendPrefCode ? datum.prefectures[trendPrefCode] : datum.national;
+                        if (!entry) return null;
+                        return (
+                          <tr key={year} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-2 pr-4 font-medium">{year}年</td>
+                            <td className="py-2 pr-4 text-right">{entry.totalUtilization != null ? `${entry.totalUtilization}%` : "-"}</td>
+                            <td className="py-2 pr-4 text-right">{entry.generalUtilization != null ? `${entry.generalUtilization}%` : "-"}</td>
+                            <td className="py-2 pr-4 text-right">{entry.therapyUtilization != null ? `${entry.therapyUtilization}%` : "-"}</td>
+                            <td className="py-2 pr-4 text-right">{entry.psychiatricUtilization != null ? `${entry.psychiatricUtilization}%` : "-"}</td>
+                            <td className="py-2 pr-4 text-right">{entry.totalAvgStay != null ? `${entry.totalAvgStay}日` : "-"}</td>
+                            <td className="py-2 text-right">{entry.generalAvgStay != null ? `${entry.generalAvgStay}日` : "-"}</td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+          <p className="mt-3 text-xs text-gray-400">
+            ※ 一部の病院で令和4年度（2022）と令和6年度（2024）の報告値が同一となるケースが確認されています。厚生労働省が公開する元データに起因するもので、本ダッシュボードの加工によるものではありません。
+          </p>
+        </div>
+      )}
+
       {/* 出典 */}
       <p className="mt-6 text-xs text-gray-400">
         出典:{" "}
@@ -924,6 +1210,103 @@ function PopulationPageInner() {
           data.source
         )}
       </p>
+        </>
+      )}
+
+      {/* 精神科医療タブ */}
+      {activeTab === "psychiatric" && (
+        <>
+          <div className="mb-6 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+            <span className="font-medium">このタブで見えるもの：</span>
+            厚生労働省「精神保健福祉資料（630調査）」に基づく精神科医療の現状。
+            病床機能報告(上タブのデータソース)とは別データセットのため独立タブ。都道府県単位での集計のみ。
+          </div>
+
+          {psychData && (
+            <>
+              <div className="mb-8 grid gap-4 sm:grid-cols-5">
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                  <p className="text-xs text-amber-600">精神科病院数</p>
+                  <p className="text-xl font-bold text-amber-900">{psychData.overview.hospitals.toLocaleString()}</p>
+                </div>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                  <p className="text-xs text-amber-600">精神病床数</p>
+                  <p className="text-xl font-bold text-amber-900">{psychData.overview.beds.toLocaleString()}床</p>
+                </div>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                  <p className="text-xs text-amber-600">在院患者数</p>
+                  <p className="text-xl font-bold text-amber-900">{psychData.admissionTypes.total.toLocaleString()}人</p>
+                </div>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                  <p className="text-xs text-amber-600">病床利用率</p>
+                  <p className="text-xl font-bold text-amber-900">
+                    {psychData.overview.beds > 0
+                      ? ((psychData.admissionTypes.total / psychData.overview.beds) * 100).toFixed(1)
+                      : 0}%
+                  </p>
+                </div>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                  <p className="text-xs text-amber-600">1年以上入院</p>
+                  <p className="text-xl font-bold text-amber-900">
+                    {psychData.admissionTypes.total > 0
+                      ? ((psychData.lengthOfStay.over1year / psychData.admissionTypes.total) * 100).toFixed(1)
+                      : 0}%
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-8 grid gap-6 lg:grid-cols-3">
+                <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                  <h3 className="mb-4 text-lg font-semibold">疾患別構成</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie data={psychDiseaseChart} cx="50%" cy="50%" innerRadius={50} outerRadius={90} dataKey="value" nameKey="name" isAnimationActive={false}>
+                        {psychDiseaseChart.map((_, i) => (
+                          <Cell key={i} fill={DISEASE_COLORS[i % DISEASE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => v.toLocaleString() + "人"} />
+                      <Legend formatter={(v: string) => v} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                  <h3 className="mb-4 text-lg font-semibold">入院形態</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie data={psychAdmissionChart} cx="50%" cy="50%" innerRadius={50} outerRadius={90} dataKey="value" nameKey="name" isAnimationActive={false}>
+                        {psychAdmissionChart.map((item, i) => (
+                          <Cell key={i} fill={item.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => v.toLocaleString() + "人"} />
+                      <Legend formatter={(v: string) => v} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                  <h3 className="mb-4 text-lg font-semibold">在院期間</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={psychLosChart} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                      <YAxis tickFormatter={(v: number) => v.toLocaleString()} />
+                      <Tooltip formatter={(v: number) => v.toLocaleString() + "人"} />
+                      <Bar dataKey="value" fill="#f59e0b" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-400">
+                出典: 厚生労働省「精神保健福祉資料（630調査）」令和7年度
+              </p>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }
