@@ -122,10 +122,10 @@ export default function HomePage() {
       {/* ヒーロー */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-          病床機能報告ダッシュボード
+          医療オープンデータ分析ダッシュボード
         </h1>
         <p className="mt-2 text-sm text-gray-500">
-          厚労省オープンデータから、病床機能・人口動態・医療リソースを組み合わせて地域の医療を可視化
+          厚労省・IPSS・e-Stat 等のオープンデータを横断し、病床機能・人口動態・医療介護リソースを組み合わせて地域の医療を分析
         </p>
       </div>
 

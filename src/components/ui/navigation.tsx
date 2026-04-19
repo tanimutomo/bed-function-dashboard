@@ -166,7 +166,7 @@ function NavigationInner() {
           </svg>
         </button>
         <Link href="/" onClick={closeMobile} className="text-sm font-bold text-gray-900">
-          病床機能報告ダッシュボード
+          医療オープンデータ分析
         </Link>
       </div>
 
@@ -192,9 +192,9 @@ function NavigationInner() {
             onClick={closeMobile}
             className="block text-sm font-bold leading-snug text-gray-900"
           >
-            病床機能報告
+            医療オープンデータ
             <br />
-            ダッシュボード
+            分析ダッシュボード
           </Link>
           {/* モバイル: 閉じるボタン */}
           <button
@@ -269,7 +269,7 @@ function NavigationInner() {
 
         {/* フッター風データ出典 */}
         <div className="border-t border-gray-200 px-5 py-3 text-[10px] leading-relaxed text-gray-400">
-          データ出典: 厚生労働省<br />「病床機能報告」ほか
+          データ出典: 厚労省・IPSS・e-Stat<br />オープンデータ各種
         </div>
       </aside>
     </>

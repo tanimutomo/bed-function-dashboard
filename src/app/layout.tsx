@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "病床機能報告ダッシュボード",
+  title: "医療オープンデータ分析ダッシュボード",
   description:
-    "厚生労働省オープンデータによる全国の病床機能報告を可視化するダッシュボード",
+    "厚労省・IPSS・e-Stat などのオープンデータから、病床機能・人口動態・医療介護リソースを横断的に可視化する経営支援ダッシュボード",
 };
 
 export default function RootLayout({
@@ -35,7 +35,7 @@ export default function RootLayout({
         <div className="flex min-h-screen flex-col lg:pl-60">
           <main className="flex-1">{children}</main>
           <footer className="border-t border-gray-200 py-4 text-center text-sm text-gray-500">
-            データ出典：厚生労働省「病床機能報告」オープンデータ
+            データ出典：厚生労働省「病床機能報告」「医師・歯科医師・薬剤師統計」「医療施設調査」「介護サービス施設・事業所調査」「患者調査」「精神保健福祉資料(630調査)」 / IPSS「日本の地域別将来推計人口」 / e-Stat 人口統計
           </footer>
         </div>
       </body>
