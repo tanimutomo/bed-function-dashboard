@@ -622,6 +622,12 @@ function PopulationPageInner() {
                 </div>
               </div>
 
+              <div className="mb-4 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+                <span className="font-medium">このセクションで見えるもの：</span>
+                現時点の「医療の供給力」。医師や医療機関の <strong>人口10万対の密度</strong> を全国平均と比較し、
+                医師確保の難易度、診療所アクセス、近隣病院との競合・連携ポテンシャルを把握します。
+              </div>
+
               {/* 人的リソース */}
               <h3 className="mb-2 text-sm font-medium text-gray-700">人的リソース (人口10万対)</h3>
               <div className="mb-5 grid gap-3 sm:grid-cols-3">
@@ -683,8 +689,28 @@ function PopulationPageInner() {
 
               <p className="mt-3 text-xs text-gray-400">
                 ※ 全国値は <strong>人口10万対</strong> で比較。全国平均より低い値は青、高い値は赤で表示。
-                地域の医療アクセシビリティと診療科の過不足を素早く把握できます。
               </p>
+
+              {/* 自動生成される示唆 */}
+              {(() => {
+                const insights = buildMedicalInsights(resourceEntry, resources?.national);
+                if (insights.length === 0) return null;
+                return (
+                  <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+                    <p className="mb-2 text-xs font-semibold text-amber-900">
+                      💡 この地域の特徴
+                    </p>
+                    <ul className="space-y-1 text-xs text-amber-900">
+                      {insights.map((ins, i) => (
+                        <li key={i} className="flex gap-1.5">
+                          <span>・</span>
+                          <span>{ins}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -710,6 +736,13 @@ function PopulationPageInner() {
                       {resourceScopeIsArea && " ※構想区域別データは無いため、所属都道府県の値を表示"}
                     </p>
                   </div>
+                </div>
+
+                <div className="mb-4 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+                  <span className="font-medium">このセクションで見えるもの：</span>
+                  <strong>退院後の受け皿</strong>の供給量。入所系介護保険施設が手薄な地域は、
+                  医療上は退院可能でも行き先が無く、療養病床や長期入院で病床を埋める要因に。
+                  75歳以上1千人あたりで比較することで高齢人口に対する実効供給を見ます。
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-4">
@@ -771,6 +804,32 @@ function PopulationPageInner() {
                   ※ 介護保険施設は医療需要の一部を代替する役割があり、供給量が少ない地域では病院の療養病床への需要が高まる傾向。
                   75歳以上1千人あたり施設数で全国平均と比較しています。
                 </p>
+
+                {/* 自動生成される示唆 */}
+                {(() => {
+                  const insights = buildKaigoInsights(
+                    kaigoEntry,
+                    kaigo.national,
+                    nat75,
+                    over75PopForResources,
+                  );
+                  if (insights.length === 0) return null;
+                  return (
+                    <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+                      <p className="mb-2 text-xs font-semibold text-amber-900">
+                        💡 この地域の特徴
+                      </p>
+                      <ul className="space-y-1 text-xs text-amber-900">
+                        {insights.map((ins, i) => (
+                          <li key={i} className="flex gap-1.5">
+                            <span>・</span>
+                            <span>{ins}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })()}
@@ -947,4 +1006,140 @@ function KaigoBox({ label, total, per1k, national, highlight }: KaigoBoxProps) {
       )}
     </div>
   );
+}
+
+
+/**
+ * 医療リソースの数値から自動的な示唆を生成。
+ * 全国平均比で大きく乖離している指標のみ短文で言及する。
+ */
+function buildMedicalInsights(
+  entry: MedicalResourceEntry,
+  nationalEntry: MedicalResourceEntry | undefined,
+): string[] {
+  if (!nationalEntry) return [];
+  const ins: string[] = [];
+
+  const cmp = (local: number, natl: number) =>
+    natl > 0 ? ((local - natl) / natl) * 100 : 0;
+
+  const phy = cmp(
+    entry.personnelPer100k.physiciansPer100k,
+    nationalEntry.personnelPer100k.physiciansPer100k,
+  );
+  const hosp = cmp(
+    entry.facilitiesPer100k.hospitalPer100k,
+    nationalEntry.facilitiesPer100k.hospitalPer100k,
+  );
+  const clinic = cmp(
+    entry.facilitiesPer100k.clinicPer100k,
+    nationalEntry.facilitiesPer100k.clinicPer100k,
+  );
+  const psych = cmp(
+    entry.facilitiesPer100k.psychiatricHospitalPer100k,
+    nationalEntry.facilitiesPer100k.psychiatricHospitalPer100k,
+  );
+
+  // 医師密度
+  if (phy <= -10) {
+    ins.push(
+      "医師密度（人口10万対）が全国平均より低い。医師確保で近隣地域と競合しやすく、" +
+        "人件費・採用コストの上昇圧力に留意が必要。",
+    );
+  } else if (phy >= 10) {
+    ins.push(
+      "医師密度が全国平均より高い。採用環境は比較的恵まれる一方、" +
+        "同業との患者シェア争いは激しくなる傾向。",
+    );
+  }
+
+  // 病院密度 (人口10万対) - 都市圏は人口分母が大きく低めに出るため解釈を「1病院あたり診療圏」に寄せる
+  if (hosp <= -20) {
+    ins.push(
+      "人口あたり病院数が少なく、1病院あたり診療圏人口が大きい。" +
+        "近隣病院との機能分担と紹介・逆紹介ネットワークがより重要に。",
+    );
+  } else if (hosp >= 20) {
+    ins.push(
+      "人口あたり病院数が多く、分散型。機能特化による差別化とブランディングが効きやすい。",
+    );
+  }
+
+  // 一般診療所密度 (プライマリケア)
+  if (clinic <= -15) {
+    ins.push(
+      "一般診療所が全国平均より少ない。外来プライマリケア供給が手薄で、病院外来への流入が増える可能性。",
+    );
+  } else if (clinic >= 15) {
+    ins.push(
+      "一般診療所が豊富。病診連携の選択肢が多く、逆紹介・紹介患者の流れを設計しやすい。",
+    );
+  }
+
+  // 精神科病院
+  if (psych <= -25) {
+    ins.push(
+      "精神科病院密度が全国平均を大きく下回る。地域の精神医療資源が限られており、" +
+        "連携先の距離・受け入れ余地を事前に把握しておくことが重要。",
+    );
+  } else if (psych >= 25) {
+    ins.push(
+      "精神科病院密度が高い。長期入院の受け皿として地域で大きな役割を担う構造と推測。",
+    );
+  }
+
+  return ins;
+}
+
+/**
+ * 介護保険施設の数値から自動的な示唆を生成。
+ * 75歳以上1千人対で全国比 -15% 以下なら「供給不足」、+15% 以上なら「供給豊富」。
+ */
+function buildKaigoInsights(
+  entry: KaigoResourceEntry,
+  nationalEntry: KaigoResourceEntry,
+  nationalOver75: number,
+  localOver75: number,
+): string[] {
+  if (localOver75 <= 0 || nationalOver75 <= 0) return [];
+  const ins: string[] = [];
+
+  const localPer1k = (n: number) => n / (localOver75 / 1000);
+  const natPer1k = (n: number) => n / (nationalOver75 / 1000);
+  const cmp = (lo: number, na: number) => (na > 0 ? ((lo - na) / na) * 100 : 0);
+
+  const total = cmp(
+    localPer1k(entry.facilities.total),
+    natPer1k(nationalEntry.facilities.total),
+  );
+  const tokuyo = cmp(
+    localPer1k(entry.facilities.specialCare),
+    natPer1k(nationalEntry.facilities.specialCare),
+  );
+  const iryoin = cmp(
+    localPer1k(entry.facilities.medicalCare),
+    natPer1k(nationalEntry.facilities.medicalCare),
+  );
+
+  if (total <= -15) {
+    ins.push(
+      "介護保険施設の供給量が全国平均より明確に少ない。" +
+        "退院後の受け皿が限られ、退院支援調整の長期化や療養病床への需要圧が強まりやすい構造。",
+    );
+  } else if (total >= 15) {
+    ins.push(
+      "介護保険施設の供給量が全国平均より多め。" +
+        "退院先の選択肢が豊富で、急性期病床の回転を上げやすい環境。",
+    );
+  }
+
+  if (tokuyo <= -20) {
+    ins.push("特に特養（介護老人福祉施設）が手薄 — 重度長期療養の受け皿が不足しやすく、療養病床・家族介護への依存が高まる傾向。");
+  }
+
+  if (iryoin <= -30) {
+    ins.push("介護医療院が少ない — 医療ニーズのある要介護者の転棟先として病院の療養病床が使われる割合が高くなりやすい。");
+  }
+
+  return ins;
 }
