@@ -545,6 +545,23 @@ function PopulationPageInner() {
         </p>
       </div>
 
+      {/* セクション目次 */}
+      <nav className="mb-8 flex flex-wrap gap-2 rounded-md border border-gray-200 bg-gray-50 p-3 text-xs">
+        <span className="mr-1 font-medium text-gray-500">セクション:</span>
+        <a href="#section-demand" className="rounded bg-white px-2 py-1 text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+          🎯 需要と将来予測
+        </a>
+        <a href="#section-supply" className="rounded bg-white px-2 py-1 text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+          🏥 医療・介護リソース
+        </a>
+        <a href="#section-detail" className="rounded bg-white px-2 py-1 text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+          📊 詳細な年次データ
+        </a>
+        <a href="#section-history" className="rounded bg-white px-2 py-1 text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+          📈 経年の変化
+        </a>
+      </nav>
+
       {showSkeleton ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
           <p className="font-medium">都道府県別データはまだ取り込まれていません。</p>
@@ -569,6 +586,16 @@ function PopulationPageInner() {
         </div>
       ) : (
         <>
+          {/* ===== Section 1: 地域の需要と将来予測 ===== */}
+          <div id="section-demand" className="mb-4 border-b-2 border-blue-500 pb-2">
+            <h2 className="text-xl font-bold text-gray-900">
+              🎯 地域の需要と将来予測
+            </h2>
+            <p className="mt-0.5 text-xs text-gray-500">
+              人口構成の変化と、それが生み出す医療需要・患者数の将来見通し
+            </p>
+          </div>
+
           {/* KPI */}
           <div className="mb-6 grid gap-4 sm:grid-cols-4">
             <KpiCard
@@ -771,6 +798,16 @@ function PopulationPageInner() {
               </div>
             );
           })()}
+
+          {/* ===== Section 2: 地域の医療・介護リソース (現状) ===== */}
+          <div id="section-supply" className="mb-4 mt-14 border-b-2 border-blue-500 pb-2">
+            <h2 className="text-xl font-bold text-gray-900">
+              🏥 地域の医療・介護リソース（現状）
+            </h2>
+            <p className="mt-0.5 text-xs text-gray-500">
+              医師・医療施設・介護施設の供給量。需要に対して供給は足りているか、不足しているかの判定材料
+            </p>
+          </div>
 
           {/* 医療・介護リソース (現時点) */}
           {resourceEntry && (
@@ -1000,9 +1037,19 @@ function PopulationPageInner() {
             );
           })()}
 
+          {/* ===== Section 4: 詳細な年次データ ===== */}
+          <div id="section-detail" className="mb-4 mt-14 border-b-2 border-blue-500 pb-2">
+            <h2 className="text-xl font-bold text-gray-900">
+              📊 詳細な年次データ
+            </h2>
+            <p className="mt-0.5 text-xs text-gray-500">
+              各年次の推計人口の詳細値（チャートより細かい数値で確認したい場合に参照）
+            </p>
+          </div>
+
           {/* 年次テーブル */}
-          <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold">年次別推計値</h2>
+          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 className="mb-4 text-lg font-semibold">年次別推計値</h3>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
@@ -1074,9 +1121,21 @@ function PopulationPageInner() {
         </>
       )}
 
+      {/* ===== Section 3: 過去の変化 (経年トレンド) ===== */}
+      {trendBedData.length > 0 && (
+        <div id="section-history" className="mb-4 mt-14 border-b-2 border-blue-500 pb-2">
+          <h2 className="text-xl font-bold text-gray-900">
+            📈 過去の変化（経年トレンド）
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-500">
+            過去5〜10年で地域の病床機能や利用率がどう動いたか。地域医療構想の進捗を読むシグナル
+          </p>
+        </div>
+      )}
+
       {/* 経年トレンド (病床機能・病床利用率) — 全国または都道府県単位 */}
       {trendBedData.length > 0 && (
-        <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
           <div className="mb-4">
             <h2 className="text-lg font-semibold">
               経年トレンド
