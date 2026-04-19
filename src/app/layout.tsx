@@ -29,12 +29,15 @@ export default function RootLayout({
       lang="ja"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-gray-50 text-gray-900 overflow-x-hidden">
+      <body className="min-h-full bg-gray-50 text-gray-900 overflow-x-hidden">
         <Navigation />
-        <main className="flex-1">{children}</main>
-        <footer className="border-t border-gray-200 py-4 text-center text-sm text-gray-500">
-          データ出典：厚生労働省「病床機能報告」オープンデータ
-        </footer>
+        {/* デスクトップではサイドバー分のオフセット (lg:pl-60) */}
+        <div className="flex min-h-screen flex-col lg:pl-60">
+          <main className="flex-1">{children}</main>
+          <footer className="border-t border-gray-200 py-4 text-center text-sm text-gray-500">
+            データ出典：厚生労働省「病床機能報告」オープンデータ
+          </footer>
+        </div>
       </body>
     </html>
   );

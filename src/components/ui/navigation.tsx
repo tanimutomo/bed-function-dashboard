@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface NavLeaf {
   href: string;
@@ -25,23 +25,25 @@ function isGroup(item: NavItem): item is NavGroup {
 const navItems: NavItem[] = [
   { href: "/", label: "ホーム" },
   {
-    label: "病院",
+    label: "病院カルテ",
     children: [
-      { href: "/hospital", label: "病院カルテ（一般病院）" },
-      { href: "/psychiatric/hospitals", label: "病院カルテ（精神科病院）" },
+      { href: "/hospital", label: "一般病院" },
+      { href: "/psychiatric/hospitals", label: "精神科病院" },
       { href: "/ranking", label: "診療実績ランキング" },
     ],
   },
   {
-    href: "/population",
     label: "地域",
-    alsoActiveFor: ["/area", "/trend", "/psychiatric"],
+    children: [
+      {
+        href: "/population",
+        label: "地域ダッシュボード",
+        alsoActiveFor: ["/area", "/trend", "/psychiatric"],
+      },
+    ],
   },
 ];
 
-/**
- * pathname に最もマッチする nav leaf の href を返す。
- */
 function findActiveHref(pathname: string, items: NavItem[]): string {
   const leaves: NavLeaf[] = [];
   for (const item of items) {
@@ -65,99 +67,155 @@ function findActiveHref(pathname: string, items: NavItem[]): string {
   return active;
 }
 
+/**
+ * サイドバー型ナビゲーション。
+ * デスクトップ (lg+): 左端に固定表示 (w-60)
+ * モバイル: ハンバーガーでドロワー開閉
+ */
 export function Navigation() {
   const pathname = usePathname();
   const activeHref = findActiveHref(pathname, navItems);
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const closeMobile = () => setMobileOpen(false);
+
+  // モバイルドロワーが開いている時は body スクロール抑止
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
 
   return (
-    <header className="relative border-b border-gray-200 bg-white">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-14 items-center justify-between">
-          <Link href="/" className="text-lg font-bold text-gray-900">
-            病床機能報告ダッシュボード
+    <>
+      {/* モバイル: 上部バー (ハンバーガー + タイトル) */}
+      <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-3 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="メニューを開く"
+          className="rounded-md border border-gray-300 p-1.5 text-gray-700 hover:bg-gray-100"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M4 7h16M4 12h16M4 17h16"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        <Link href="/" onClick={closeMobile} className="text-sm font-bold text-gray-900">
+          病床機能報告ダッシュボード
+        </Link>
+      </div>
+
+      {/* モバイル: オーバーレイ */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden
+        />
+      )}
+
+      {/* サイドバー本体 */}
+      <aside
+        className={`fixed left-0 top-0 z-50 flex h-screen w-60 flex-col border-r border-gray-200 bg-white transition-transform duration-200 lg:translate-x-0 ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {/* ロゴ・タイトル */}
+        <div className="flex items-start justify-between border-b border-gray-200 px-5 py-4">
+          <Link
+            href="/"
+            onClick={closeMobile}
+            className="block text-sm font-bold leading-snug text-gray-900"
+          >
+            病床機能報告
+            <br />
+            ダッシュボード
           </Link>
-          <nav className="flex items-center gap-1">
+          {/* モバイル: 閉じるボタン */}
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="メニューを閉じる"
+            className="-mr-2 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 lg:hidden"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="M6 6l12 12M6 18L18 6"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        </div>
+
+        {/* ナビリスト */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          <ul className="space-y-1">
             {navItems.map((item) => {
               if (isGroup(item)) {
-                const groupActive = item.children.some((c) => c.href === activeHref);
-                const isOpen = openGroup === item.label;
                 return (
-                  <div
-                    key={item.label}
-                    className="relative"
-                    onMouseEnter={() => setOpenGroup(item.label)}
-                    onMouseLeave={() => setOpenGroup(null)}
-                  >
-                    <button
-                      onClick={() => setOpenGroup(isOpen ? null : item.label)}
-                      className={`flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                        groupActive
-                          ? "bg-blue-50 text-blue-700"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                      }`}
-                    >
+                  <li key={item.label} className="pt-3 first:pt-0">
+                    <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
                       {item.label}
-                      <svg
-                        className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                        viewBox="0 0 12 12"
-                        fill="none"
-                        aria-hidden
-                      >
-                        <path
-                          d="M3 4.5L6 7.5L9 4.5"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </button>
-
-                    {isOpen && (
-                      <div className="absolute right-0 top-full z-20 mt-1 min-w-[240px] overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
-                        {item.children.map((child) => {
-                          const childActive = activeHref === child.href;
-                          return (
+                    </p>
+                    <ul className="space-y-0.5">
+                      {item.children.map((child) => {
+                        const isActive = activeHref === child.href;
+                        return (
+                          <li key={child.href}>
                             <Link
-                              key={child.href}
                               href={child.href}
-                              onClick={() => setOpenGroup(null)}
-                              className={`block px-4 py-2 text-sm transition-colors ${
-                                childActive
-                                  ? "bg-blue-50 text-blue-700 font-medium"
-                                  : "text-gray-700 hover:bg-gray-50"
+                              onClick={closeMobile}
+                              className={`block rounded-md px-3 py-1.5 text-sm transition-colors ${
+                                isActive
+                                  ? "bg-blue-50 font-medium text-blue-700"
+                                  : "text-gray-700 hover:bg-gray-100"
                               }`}
                             >
                               {child.label}
                             </Link>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </li>
                 );
               }
-
-              // Leaf item
               const isActive = activeHref === item.href;
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
-                >
-                  {item.label}
-                </Link>
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={closeMobile}
+                    className={`block rounded-md px-3 py-1.5 text-sm transition-colors ${
+                      isActive
+                        ? "bg-blue-50 font-medium text-blue-700"
+                        : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
               );
             })}
-          </nav>
+          </ul>
+        </nav>
+
+        {/* フッター風データ出典 */}
+        <div className="border-t border-gray-200 px-5 py-3 text-[10px] leading-relaxed text-gray-400">
+          データ出典: 厚生労働省<br />「病床機能報告」ほか
         </div>
-      </div>
-    </header>
+      </aside>
+    </>
   );
 }
