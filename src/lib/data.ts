@@ -197,6 +197,59 @@ export async function fetchJmapIndex(): Promise<JmapIndexData> {
   return res.json();
 }
 
+export interface MedicalResourcePersonnel {
+  physiciansTotal: number;
+  physiciansInFacility: number;
+  dentistsTotal: number;
+  dentistsInFacility: number;
+  pharmacistsTotal: number;
+  pharmacistsInFacility: number;
+}
+export interface MedicalResourcePersonnelPer100k {
+  physiciansPer100k: number;
+  physiciansInFacilityPer100k: number;
+  dentistsPer100k: number;
+  dentistsInFacilityPer100k: number;
+  pharmacistsPer100k: number;
+  pharmacistsInFacilityPer100k: number;
+}
+export interface MedicalResourceFacilities {
+  hospital: number;
+  psychiatricHospital: number;
+  generalHospital: number;
+  clinic: number;
+  clinicWithBeds: number;
+  dentalClinic: number;
+}
+export interface MedicalResourceFacilitiesPer100k {
+  hospitalPer100k: number;
+  psychiatricHospitalPer100k: number;
+  generalHospitalPer100k: number;
+  clinicPer100k: number;
+  clinicWithBedsPer100k: number;
+  dentalClinicPer100k: number;
+}
+export interface MedicalResourceEntry {
+  personnel: MedicalResourcePersonnel;
+  personnelPer100k: MedicalResourcePersonnelPer100k;
+  facilities: MedicalResourceFacilities;
+  facilitiesPer100k: MedicalResourceFacilitiesPer100k;
+}
+
+export interface MedicalResourcesData {
+  sources: {
+    personnel: { name: string; url?: string; year: string };
+    facilities: { name: string; url?: string; year: string };
+  };
+  national: MedicalResourceEntry;
+  prefectures: Record<string, MedicalResourceEntry>;
+}
+
+export async function fetchMedicalResources(): Promise<MedicalResourcesData> {
+  const res = await fetch(`${BASE_PATH}/summary/medical_resources.json`);
+  return res.json();
+}
+
 /** 都道府県コード→名称（ソート済み配列） */
 export const PREFECTURE_LIST: [string, string][] = [
   ["01", "北海道"], ["02", "青森県"], ["03", "岩手県"], ["04", "宮城県"], ["05", "秋田県"],

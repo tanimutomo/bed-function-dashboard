@@ -19,12 +19,15 @@ import {
   fetchPopulationFuture,
   fetchPopulationFutureAreas,
   fetchJmapIndex,
+  fetchMedicalResources,
   PREFECTURE_LIST,
   PREFECTURE_NAMES,
   type PopulationFutureData,
   type PopulationFutureAreasData,
   type PopulationFutureYear,
   type JmapIndexData,
+  type MedicalResourcesData,
+  type MedicalResourceEntry,
 } from "@/lib/data";
 import {
   fetchUtilizationRates,
@@ -81,6 +84,7 @@ function PopulationPageInner() {
   const [areaData, setAreaData] = useState<PopulationFutureAreasData | null>(null);
   const [rates, setRates] = useState<UtilizationRates | null>(null);
   const [jmap, setJmap] = useState<JmapIndexData | null>(null);
+  const [resources, setResources] = useState<MedicalResourcesData | null>(null);
   const [scope, setScope] = useState<Scope>(initialScope);
   // area: scope の場合は、その構想区域の都道府県を初期フィルタにする
   const [areaPrefFilter, setAreaPrefFilter] = useState<string>("");
@@ -94,12 +98,14 @@ function PopulationPageInner() {
       fetchPopulationFutureAreas(),
       fetchUtilizationRates(),
       fetchJmapIndex().catch(() => null),
+      fetchMedicalResources().catch(() => null),
     ])
-      .then(([d, a, r, j]) => {
+      .then(([d, a, r, j, res]) => {
         setData(d);
         setAreaData(a);
         setRates(r);
         setJmap(j);
+        setResources(res);
         // area スコープの場合は、対応する都道府県をフィルタに設定
         if (initialScope.startsWith("area:")) {
           const code = initialScope.slice(5);
@@ -140,6 +146,23 @@ function PopulationPageInner() {
     if (!selected) return [];
     return toTrendPoints(selected.years);
   }, [selected]);
+
+  // 医療リソース (都道府県/全国のみ)
+  const resourceEntry: MedicalResourceEntry | null = useMemo(() => {
+    if (!resources) return null;
+    if (scope === "national") return resources.national;
+    if (scope.startsWith("pref:")) {
+      return resources.prefectures[scope.slice(5)] ?? null;
+    }
+    if (scope.startsWith("area:") && areaData) {
+      // 構想区域スコープ時は所属都道府県のリソースを参考表示
+      const code = scope.slice(5);
+      const pref = areaData.areas[code]?.prefecture;
+      if (pref) return resources.prefectures[pref] ?? null;
+    }
+    return null;
+  }, [resources, scope, areaData]);
+  const resourceScopeIsArea = scope.startsWith("area:");
 
   // JMAP 医療・介護需要予測指数
   const demandIndexPoints: DemandIndexPoint[] = useMemo(() => {
@@ -546,6 +569,88 @@ function PopulationPageInner() {
             );
           })()}
 
+          {/* 医療・介護リソース (現時点) */}
+          {resourceEntry && (
+            <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold">
+                    医療・介護リソース
+                    {scope !== "national" && selected && ` - ${resourceScopeIsArea && areaData && scope.startsWith("area:") ? (PREFECTURE_NAMES[areaData.areas[scope.slice(5)]?.prefecture ?? ""] ?? "") : selected.name}`}
+                  </h2>
+                  <p className="mt-1 text-xs text-gray-400">
+                    医師・歯科医師・薬剤師 (R4 2022年末) / 医療施設 (R5 2023年)
+                    {resourceScopeIsArea && " ※構想区域別データは無いため、所属都道府県の値を表示"}
+                  </p>
+                </div>
+              </div>
+
+              {/* 人的リソース */}
+              <h3 className="mb-2 text-sm font-medium text-gray-700">人的リソース (人口10万対)</h3>
+              <div className="mb-5 grid gap-3 sm:grid-cols-3">
+                <ResourceBox
+                  label="医師"
+                  total={resourceEntry.personnel.physiciansTotal}
+                  per100k={resourceEntry.personnelPer100k.physiciansPer100k}
+                  national={resources?.national.personnelPer100k.physiciansPer100k ?? 0}
+                  unit="人"
+                />
+                <ResourceBox
+                  label="歯科医師"
+                  total={resourceEntry.personnel.dentistsTotal}
+                  per100k={resourceEntry.personnelPer100k.dentistsPer100k}
+                  national={resources?.national.personnelPer100k.dentistsPer100k ?? 0}
+                  unit="人"
+                />
+                <ResourceBox
+                  label="薬剤師"
+                  total={resourceEntry.personnel.pharmacistsTotal}
+                  per100k={resourceEntry.personnelPer100k.pharmacistsPer100k}
+                  national={resources?.national.personnelPer100k.pharmacistsPer100k ?? 0}
+                  unit="人"
+                />
+              </div>
+
+              {/* 施設 */}
+              <h3 className="mb-2 text-sm font-medium text-gray-700">医療施設 (人口10万対)</h3>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <ResourceBox
+                  label="病院"
+                  total={resourceEntry.facilities.hospital}
+                  per100k={resourceEntry.facilitiesPer100k.hospitalPer100k}
+                  national={resources?.national.facilitiesPer100k.hospitalPer100k ?? 0}
+                  unit="施設"
+                />
+                <ResourceBox
+                  label="精神科病院"
+                  total={resourceEntry.facilities.psychiatricHospital}
+                  per100k={resourceEntry.facilitiesPer100k.psychiatricHospitalPer100k}
+                  national={resources?.national.facilitiesPer100k.psychiatricHospitalPer100k ?? 0}
+                  unit="施設"
+                />
+                <ResourceBox
+                  label="一般診療所"
+                  total={resourceEntry.facilities.clinic}
+                  per100k={resourceEntry.facilitiesPer100k.clinicPer100k}
+                  national={resources?.national.facilitiesPer100k.clinicPer100k ?? 0}
+                  unit="施設"
+                />
+                <ResourceBox
+                  label="歯科診療所"
+                  total={resourceEntry.facilities.dentalClinic}
+                  per100k={resourceEntry.facilitiesPer100k.dentalClinicPer100k}
+                  national={resources?.national.facilitiesPer100k.dentalClinicPer100k ?? 0}
+                  unit="施設"
+                />
+              </div>
+
+              <p className="mt-3 text-xs text-gray-400">
+                ※ 全国値は <strong>人口10万対</strong> で比較。全国平均より低い値は青、高い値は赤で表示。
+                地域の医療アクセシビリティと診療科の過不足を素早く把握できます。
+              </p>
+            </div>
+          )}
+
           {/* 年次テーブル */}
           <div className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold">年次別推計値</h2>
@@ -636,6 +741,46 @@ function PopulationPageInner() {
           data.source
         )}
       </p>
+    </div>
+  );
+}
+
+interface ResourceBoxProps {
+  label: string;
+  total: number;
+  per100k: number;
+  national: number;
+  unit: string;
+}
+
+function ResourceBox({ label, total, per100k, national, unit }: ResourceBoxProps) {
+  const delta = national > 0 ? per100k - national : 0;
+  const deltaPct = national > 0 ? ((per100k - national) / national) * 100 : 0;
+  const aboveNatl = delta > 0;
+  const belowNatl = delta < 0;
+  const border = aboveNatl
+    ? "border-red-200 bg-red-50"
+    : belowNatl
+      ? "border-blue-200 bg-blue-50"
+      : "border-gray-200 bg-gray-50";
+  const deltaCol = aboveNatl ? "text-red-600" : belowNatl ? "text-blue-600" : "text-gray-500";
+
+  return (
+    <div className={`rounded-md border p-3 ${border}`}>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="mt-1 text-xl font-bold text-gray-900">
+        {per100k.toFixed(1)}
+        <span className="ml-1 text-xs font-normal text-gray-500">/10万人</span>
+      </p>
+      <p className="mt-0.5 text-[11px] text-gray-700">
+        総数 {total.toLocaleString()}
+        {unit}
+      </p>
+      {national > 0 && (
+        <p className={`mt-0.5 text-[11px] ${deltaCol}`}>
+          全国平均 {national.toFixed(1)} ({deltaPct > 0 ? "+" : ""}{deltaPct.toFixed(1)}%)
+        </p>
+      )}
     </div>
   );
 }
