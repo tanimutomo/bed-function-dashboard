@@ -11,10 +11,31 @@ const navItems = [
   { href: "/population", label: "人口動態" },
   { href: "/hospital", label: "病院カルテ" },
   { href: "/psychiatric", label: "精神科", accent: true },
+  { href: "/psychiatric/hospitals", label: "精神科病院", accent: true },
 ];
+
+/**
+ * pathname に最もマッチする nav item の href を1つだけ返す。
+ * 例: /psychiatric/hospitals は /psychiatric より /psychiatric/hospitals にマッチ。
+ * /psychiatric/P120242 (動的ルート) は /psychiatric にマッチ。
+ */
+function findActiveHref(pathname: string, items: { href: string }[]): string {
+  let active = "";
+  for (const item of items) {
+    if (item.href === "/") continue;
+    const matches =
+      pathname === item.href || pathname.startsWith(item.href + "/");
+    if (matches && item.href.length > active.length) {
+      active = item.href;
+    }
+  }
+  if (!active && pathname === "/") active = "/";
+  return active;
+}
 
 export function Navigation() {
   const pathname = usePathname();
+  const activeHref = findActiveHref(pathname, navItems);
 
   return (
     <header className="border-b border-gray-200 bg-white">
@@ -25,10 +46,7 @@ export function Navigation() {
           </Link>
           <nav className="flex gap-1">
             {navItems.map((item) => {
-              const isActive =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
+              const isActive = activeHref === item.href;
               const accent = "accent" in item && item.accent;
               return (
                 <Link
