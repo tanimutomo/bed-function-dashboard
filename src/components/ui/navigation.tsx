@@ -2,32 +2,66 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 
-const navItems = [
-  { href: "/", label: "全国俯瞰" },
-  { href: "/area", label: "構想区域" },
-  { href: "/ranking", label: "ランキング" },
+interface NavLeaf {
+  href: string;
+  label: string;
+}
+
+interface NavGroup {
+  label: string;
+  accent?: boolean;
+  children: NavLeaf[];
+}
+
+type NavItem = NavLeaf | NavGroup;
+
+function isGroup(item: NavItem): item is NavGroup {
+  return "children" in item;
+}
+
+const navItems: NavItem[] = [
+  { href: "/", label: "ホーム" },
+  {
+    label: "病院",
+    children: [
+      { href: "/hospital", label: "病院カルテ" },
+      { href: "/ranking", label: "ランキング" },
+    ],
+  },
+  {
+    label: "地域",
+    children: [
+      { href: "/area", label: "構想区域" },
+      { href: "/population", label: "人口動態・将来推計" },
+    ],
+  },
   { href: "/trend", label: "経年トレンド" },
-  { href: "/population", label: "人口動態" },
-  { href: "/hospital", label: "病院カルテ" },
-  { href: "/psychiatric", label: "精神科", accent: true },
-  { href: "/psychiatric/hospitals", label: "精神科病院", accent: true },
+  {
+    label: "精神科",
+    accent: true,
+    children: [
+      { href: "/psychiatric", label: "ダッシュボード" },
+      { href: "/psychiatric/hospitals", label: "精神科病院一覧" },
+    ],
+  },
 ];
 
 /**
- * pathname に最もマッチする nav item の href を1つだけ返す。
- * 例: /psychiatric/hospitals は /psychiatric より /psychiatric/hospitals にマッチ。
- * /psychiatric/P120242 (動的ルート) は /psychiatric にマッチ。
+ * pathname に最もマッチする nav leaf の href を返す。
  */
-function findActiveHref(pathname: string, items: { href: string }[]): string {
-  let active = "";
+function findActiveHref(pathname: string, items: NavItem[]): string {
+  const leaves: NavLeaf[] = [];
   for (const item of items) {
-    if (item.href === "/") continue;
-    const matches =
-      pathname === item.href || pathname.startsWith(item.href + "/");
-    if (matches && item.href.length > active.length) {
-      active = item.href;
-    }
+    if (isGroup(item)) leaves.push(...item.children);
+    else leaves.push(item);
+  }
+  let active = "";
+  for (const leaf of leaves) {
+    if (leaf.href === "/") continue;
+    const matches = pathname === leaf.href || pathname.startsWith(leaf.href + "/");
+    if (matches && leaf.href.length > active.length) active = leaf.href;
   }
   if (!active && pathname === "/") active = "/";
   return active;
@@ -36,30 +70,96 @@ function findActiveHref(pathname: string, items: { href: string }[]): string {
 export function Navigation() {
   const pathname = usePathname();
   const activeHref = findActiveHref(pathname, navItems);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   return (
-    <header className="border-b border-gray-200 bg-white">
+    <header className="relative border-b border-gray-200 bg-white">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-14 items-center justify-between">
           <Link href="/" className="text-lg font-bold text-gray-900">
             病床機能報告ダッシュボード
           </Link>
-          <nav className="flex gap-1">
+          <nav className="flex items-center gap-1">
             {navItems.map((item) => {
+              if (isGroup(item)) {
+                const groupActive = item.children.some((c) => c.href === activeHref);
+                const isOpen = openGroup === item.label;
+                const accent = item.accent;
+                return (
+                  <div
+                    key={item.label}
+                    className="relative"
+                    onMouseEnter={() => setOpenGroup(item.label)}
+                    onMouseLeave={() => setOpenGroup(null)}
+                  >
+                    <button
+                      onClick={() => setOpenGroup(isOpen ? null : item.label)}
+                      className={`flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                        groupActive
+                          ? accent
+                            ? "bg-amber-50 text-amber-700"
+                            : "bg-blue-50 text-blue-700"
+                          : accent
+                            ? "text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                      }`}
+                    >
+                      {item.label}
+                      <svg
+                        className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        aria-hidden
+                      >
+                        <path
+                          d="M3 4.5L6 7.5L9 4.5"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+
+                    {isOpen && (
+                      <div
+                        className={`absolute right-0 top-full z-20 mt-1 min-w-[200px] overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg`}
+                      >
+                        {item.children.map((child) => {
+                          const childActive = activeHref === child.href;
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              onClick={() => setOpenGroup(null)}
+                              className={`block px-4 py-2 text-sm transition-colors ${
+                                childActive
+                                  ? accent
+                                    ? "bg-amber-50 text-amber-700 font-medium"
+                                    : "bg-blue-50 text-blue-700 font-medium"
+                                  : "text-gray-700 hover:bg-gray-50"
+                              }`}
+                            >
+                              {child.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // Leaf item
               const isActive = activeHref === item.href;
-              const accent = "accent" in item && item.accent;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                     isActive
-                      ? accent
-                        ? "bg-amber-50 text-amber-700"
-                        : "bg-blue-50 text-blue-700"
-                      : accent
-                        ? "text-amber-600 hover:bg-amber-50 hover:text-amber-700"
-                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                   }`}
                 >
                   {item.label}

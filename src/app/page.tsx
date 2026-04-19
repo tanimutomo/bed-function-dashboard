@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { FunctionBarChart } from "@/components/charts/function-bar-chart";
 import { FunctionPieChart } from "@/components/charts/function-pie-chart";
@@ -118,9 +119,65 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-6 flex items-center justify-between">
+      {/* ヒーロー */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+          病床機能報告ダッシュボード
+        </h1>
+        <p className="mt-2 text-sm text-gray-500">
+          厚労省オープンデータから、病床機能・人口動態・医療リソースを組み合わせて地域の医療を可視化
+        </p>
+      </div>
+
+      {/* 何から見ますか? セクション (4カード) */}
+      <section className="mb-10">
+        <h2 className="mb-4 text-base font-semibold text-gray-700">何から見ますか?</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <HubCard
+            title="自病院を調べる"
+            description="病院カルテで診療実績・病床機能・職員構成を確認"
+            icon="🏥"
+            primaryHref="/hospital"
+            primaryLabel="病院カルテ"
+            subLinks={[{ href: "/ranking", label: "診療実績ランキング" }]}
+            color="blue"
+          />
+          <HubCard
+            title="地域の状況を知る"
+            description="構想区域ごとの病床構成、他病院との比較、医療アクセス"
+            icon="📍"
+            primaryHref="/area"
+            primaryLabel="構想区域"
+            subLinks={[
+              { href: "/", label: "全国俯瞰（下にスクロール）", isScroll: true },
+            ]}
+            color="blue"
+          />
+          <HubCard
+            title="将来を予測する"
+            description="2050年までの推計人口・患者数・医療介護需要指数"
+            icon="🔮"
+            primaryHref="/population"
+            primaryLabel="人口動態・将来推計"
+            subLinks={[{ href: "/trend", label: "経年トレンド" }]}
+            color="blue"
+          />
+          <HubCard
+            title="精神科を見る"
+            description="630調査に基づく精神科医療の現状、病院別カルテ"
+            icon="🧠"
+            primaryHref="/psychiatric"
+            primaryLabel="精神科ダッシュボード"
+            subLinks={[{ href: "/psychiatric/hospitals", label: "精神科病院一覧" }]}
+            color="amber"
+          />
+        </div>
+      </section>
+
+      {/* 全国俯瞰 */}
+      <div id="overview" className="mb-6 flex items-center justify-between border-t border-gray-200 pt-8">
         <div>
-          <h1 className="text-2xl font-bold">全国俯瞰</h1>
+          <h2 className="text-2xl font-bold">全国俯瞰</h2>
           <p className="mt-1 text-sm text-gray-500">
             {selected.year}年度 病床機能報告データ（{selected.totalHospitals.toLocaleString()}病院）
           </p>
@@ -222,6 +279,78 @@ export default function HomePage() {
           ))}
           <span>高い</span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface HubCardProps {
+  title: string;
+  description: string;
+  icon: string;
+  primaryHref: string;
+  primaryLabel: string;
+  subLinks?: { href: string; label: string; isScroll?: boolean }[];
+  color: "blue" | "amber";
+}
+
+function HubCard({
+  title,
+  description,
+  icon,
+  primaryHref,
+  primaryLabel,
+  subLinks,
+  color,
+}: HubCardProps) {
+  const isAccent = color === "amber";
+  const border = isAccent ? "border-amber-200 hover:border-amber-400" : "border-gray-200 hover:border-blue-400";
+  const bg = isAccent ? "bg-amber-50" : "bg-white";
+  const primaryText = isAccent ? "text-amber-700" : "text-blue-700";
+  const primaryBg = isAccent
+    ? "bg-amber-100 hover:bg-amber-200 text-amber-800"
+    : "bg-blue-50 hover:bg-blue-100 text-blue-700";
+
+  return (
+    <div
+      className={`group relative flex flex-col rounded-lg border ${border} ${bg} p-5 shadow-sm transition`}
+    >
+      <div className="flex items-start gap-3">
+        <span className="text-2xl" aria-hidden>
+          {icon}
+        </span>
+        <div className="flex-1">
+          <h3 className={`font-semibold ${primaryText}`}>{title}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-gray-600">{description}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-1.5">
+        <Link
+          href={primaryHref}
+          className={`inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium ${primaryBg}`}
+        >
+          {primaryLabel} →
+        </Link>
+        {subLinks?.map((l) =>
+          l.isScroll ? (
+            <a
+              key={l.label}
+              href={"#overview"}
+              className="text-center text-[11px] text-gray-500 underline hover:text-gray-700"
+            >
+              {l.label}
+            </a>
+          ) : (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="text-center text-[11px] text-gray-500 underline hover:text-gray-700"
+            >
+              {l.label}
+            </Link>
+          ),
+        )}
       </div>
     </div>
   );
