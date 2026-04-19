@@ -129,47 +129,44 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* 何から見ますか? セクション (4カード) */}
+      {/* 何から見ますか? セクション (3カード) */}
       <section className="mb-10">
         <h2 className="mb-4 text-base font-semibold text-gray-700">何から見ますか?</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-3">
+          {/* 自病院を調べる */}
           <HubCard
             title="自病院を調べる"
-            description="病院カルテで診療実績・病床機能・職員構成を確認"
+            description="病院ごとのカルテで診療実績・病床機能・職員構成を確認"
             icon="🏥"
-            primaryHref="/hospital"
-            primaryLabel="病院カルテ"
+            primaryActions={[
+              { href: "/hospital", label: "一般病院" },
+              { href: "/psychiatric/hospitals", label: "精神科病院" },
+            ]}
             subLinks={[{ href: "/ranking", label: "診療実績ランキング" }]}
-            color="blue"
           />
+          {/* 地域の状況を知る */}
           <HubCard
             title="地域の状況を知る"
-            description="構想区域ごとの病床構成、他病院との比較、医療アクセス"
+            description="構想区域・都道府県ごとの医療供給と、精神科医療の現状"
             icon="📍"
-            primaryHref="/area"
-            primaryLabel="構想区域"
+            primaryActions={[
+              { href: "/area", label: "構想区域" },
+              { href: "/psychiatric", label: "精神科医療の状況" },
+            ]}
             subLinks={[
+              { href: "/trend", label: "経年トレンド" },
               { href: "/", label: "全国俯瞰（下にスクロール）", isScroll: true },
             ]}
-            color="blue"
           />
+          {/* 将来を予測する */}
           <HubCard
             title="将来を予測する"
             description="2050年までの推計人口・患者数・医療介護需要指数"
             icon="🔮"
-            primaryHref="/population"
-            primaryLabel="人口動態・将来推計"
+            primaryActions={[
+              { href: "/population", label: "人口動態・将来推計" },
+            ]}
             subLinks={[{ href: "/trend", label: "経年トレンド" }]}
-            color="blue"
-          />
-          <HubCard
-            title="精神科を見る"
-            description="630調査に基づく精神科医療の現状、病院別カルテ"
-            icon="🧠"
-            primaryHref="/psychiatric"
-            primaryLabel="精神科ダッシュボード"
-            subLinks={[{ href: "/psychiatric/hospitals", label: "精神科病院一覧" }]}
-            color="amber"
           />
         </div>
       </section>
@@ -288,50 +285,43 @@ interface HubCardProps {
   title: string;
   description: string;
   icon: string;
-  primaryHref: string;
-  primaryLabel: string;
+  primaryActions: { href: string; label: string }[];
   subLinks?: { href: string; label: string; isScroll?: boolean }[];
-  color: "blue" | "amber";
 }
 
 function HubCard({
   title,
   description,
   icon,
-  primaryHref,
-  primaryLabel,
+  primaryActions,
   subLinks,
-  color,
 }: HubCardProps) {
-  const isAccent = color === "amber";
-  const border = isAccent ? "border-amber-200 hover:border-amber-400" : "border-gray-200 hover:border-blue-400";
-  const bg = isAccent ? "bg-amber-50" : "bg-white";
-  const primaryText = isAccent ? "text-amber-700" : "text-blue-700";
-  const primaryBg = isAccent
-    ? "bg-amber-100 hover:bg-amber-200 text-amber-800"
-    : "bg-blue-50 hover:bg-blue-100 text-blue-700";
-
+  // プライマリボタンが複数ある場合は縦並び、1つだけなら単独表示
+  const gridCols = primaryActions.length > 1 ? "grid-cols-2" : "grid-cols-1";
   return (
-    <div
-      className={`group relative flex flex-col rounded-lg border ${border} ${bg} p-5 shadow-sm transition`}
-    >
+    <div className="group relative flex flex-col rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition hover:border-blue-400">
       <div className="flex items-start gap-3">
         <span className="text-2xl" aria-hidden>
           {icon}
         </span>
         <div className="flex-1">
-          <h3 className={`font-semibold ${primaryText}`}>{title}</h3>
+          <h3 className="font-semibold text-blue-700">{title}</h3>
           <p className="mt-1 text-xs leading-relaxed text-gray-600">{description}</p>
         </div>
       </div>
 
       <div className="mt-4 flex flex-col gap-1.5">
-        <Link
-          href={primaryHref}
-          className={`inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium ${primaryBg}`}
-        >
-          {primaryLabel} →
-        </Link>
+        <div className={`grid gap-2 ${gridCols}`}>
+          {primaryActions.map((a) => (
+            <Link
+              key={a.href}
+              href={a.href}
+              className="inline-flex items-center justify-center rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+            >
+              {a.label} →
+            </Link>
+          ))}
+        </div>
         {subLinks?.map((l) =>
           l.isScroll ? (
             <a

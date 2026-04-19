@@ -11,7 +11,6 @@ interface NavLeaf {
 
 interface NavGroup {
   label: string;
-  accent?: boolean;
   children: NavLeaf[];
 }
 
@@ -26,8 +25,9 @@ const navItems: NavItem[] = [
   {
     label: "病院",
     children: [
-      { href: "/hospital", label: "病院カルテ" },
-      { href: "/ranking", label: "ランキング" },
+      { href: "/hospital", label: "病院カルテ（一般病院）" },
+      { href: "/psychiatric/hospitals", label: "病院カルテ（精神科病院）" },
+      { href: "/ranking", label: "診療実績ランキング" },
     ],
   },
   {
@@ -35,15 +35,8 @@ const navItems: NavItem[] = [
     children: [
       { href: "/area", label: "構想区域" },
       { href: "/population", label: "人口動態・将来推計" },
-    ],
-  },
-  { href: "/trend", label: "経年トレンド" },
-  {
-    label: "精神科",
-    accent: true,
-    children: [
-      { href: "/psychiatric", label: "ダッシュボード" },
-      { href: "/psychiatric/hospitals", label: "精神科病院一覧" },
+      { href: "/trend", label: "経年トレンド" },
+      { href: "/psychiatric", label: "精神科医療の状況" },
     ],
   },
 ];
@@ -84,7 +77,6 @@ export function Navigation() {
               if (isGroup(item)) {
                 const groupActive = item.children.some((c) => c.href === activeHref);
                 const isOpen = openGroup === item.label;
-                const accent = item.accent;
                 return (
                   <div
                     key={item.label}
@@ -96,12 +88,8 @@ export function Navigation() {
                       onClick={() => setOpenGroup(isOpen ? null : item.label)}
                       className={`flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                         groupActive
-                          ? accent
-                            ? "bg-amber-50 text-amber-700"
-                            : "bg-blue-50 text-blue-700"
-                          : accent
-                            ? "text-amber-600 hover:bg-amber-50 hover:text-amber-700"
-                            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                          ? "bg-blue-50 text-blue-700"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                       }`}
                     >
                       {item.label}
@@ -122,9 +110,7 @@ export function Navigation() {
                     </button>
 
                     {isOpen && (
-                      <div
-                        className={`absolute right-0 top-full z-20 mt-1 min-w-[200px] overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg`}
-                      >
+                      <div className="absolute right-0 top-full z-20 mt-1 min-w-[240px] overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
                         {item.children.map((child) => {
                           const childActive = activeHref === child.href;
                           return (
@@ -134,9 +120,7 @@ export function Navigation() {
                               onClick={() => setOpenGroup(null)}
                               className={`block px-4 py-2 text-sm transition-colors ${
                                 childActive
-                                  ? accent
-                                    ? "bg-amber-50 text-amber-700 font-medium"
-                                    : "bg-blue-50 text-blue-700 font-medium"
+                                  ? "bg-blue-50 text-blue-700 font-medium"
                                   : "text-gray-700 hover:bg-gray-50"
                               }`}
                             >
