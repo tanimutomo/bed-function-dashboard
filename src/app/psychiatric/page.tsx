@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { Suspense, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   BarChart,
   Bar,
@@ -60,13 +61,45 @@ const ADMISSION_COLORS = {
 
 const PAGE_SIZE = 50;
 
+type Tab = "dashboard" | "list";
+
 export default function PsychiatricPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-7xl px-4 py-8">
+          <p className="text-gray-500">データを読み込み中...</p>
+        </div>
+      }
+    >
+      <PsychiatricPageInner />
+    </Suspense>
+  );
+}
+
+function PsychiatricPageInner() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const initialTab: Tab = searchParams.get("tab") === "list" ? "list" : "dashboard";
+
   const [hospitals, setHospitals] = useState<PsychHospital[]>([]);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPref, setSelectedPref] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(0);
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+
+  // タブ切替時に URL を更新（ブックマーク可能にする）
+  const switchTab = (tab: Tab) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === "list") params.set("tab", "list");
+    else params.delete("tab");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   useEffect(() => {
     Promise.all([fetchHospitalIndex(), fetch630Summary()]).then(([idx, sum]) => {
@@ -176,12 +209,38 @@ export default function PsychiatricPage() {
         </p>
       </div>
 
-      {/* 都道府県選択 */}
-      <div className="mb-6">
+      {/* タブ切替 */}
+      <div className="mb-6 flex items-end justify-between gap-4 border-b border-amber-200">
+        <div className="flex gap-1">
+          <button
+            onClick={() => switchTab("dashboard")}
+            className={`rounded-t-md px-4 py-2 text-sm font-medium transition ${
+              activeTab === "dashboard"
+                ? "border-b-2 border-amber-600 bg-amber-50 text-amber-900"
+                : "text-gray-500 hover:bg-amber-50 hover:text-amber-700"
+            }`}
+          >
+            ダッシュボード
+          </button>
+          <button
+            onClick={() => switchTab("list")}
+            className={`rounded-t-md px-4 py-2 text-sm font-medium transition ${
+              activeTab === "list"
+                ? "border-b-2 border-amber-600 bg-amber-50 text-amber-900"
+                : "text-gray-500 hover:bg-amber-50 hover:text-amber-700"
+            }`}
+          >
+            精神科病院一覧
+            <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-700">
+              {hospitals.length.toLocaleString()}
+            </span>
+          </button>
+        </div>
+        {/* 都道府県選択 — 両タブ共通 */}
         <select
           value={selectedPref}
           onChange={(e) => setSelectedPref(e.target.value)}
-          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm"
+          className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm"
         >
           <option value="all">全国</option>
           {PREFECTURE_LIST.map(([code, name]) => (
@@ -190,6 +249,8 @@ export default function PsychiatricPage() {
         </select>
       </div>
 
+      {activeTab === "dashboard" && (
+        <>
       {/* KPI */}
       {currentPrefData && (
         <div className="mb-8 grid gap-4 sm:grid-cols-5">
@@ -324,6 +385,11 @@ export default function PsychiatricPage() {
         </div>
       )}
 
+        </>
+      )}
+
+      {activeTab === "list" && (
+        <>
       {/* 病院一覧 */}
       <div className="rounded-lg border border-amber-200 bg-white shadow-sm">
         <div className="border-b border-amber-100 px-6 py-4">
@@ -404,6 +470,8 @@ export default function PsychiatricPage() {
           </div>
         )}
       </div>
+        </>
+      )}
 
       <p className="mt-4 text-xs text-gray-400">
         データ出典：厚生労働省「精神保健福祉資料（630調査）」令和7年度 / 医療情報ネット オープンデータ
