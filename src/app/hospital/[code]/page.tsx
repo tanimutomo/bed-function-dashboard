@@ -71,6 +71,7 @@ interface HospitalYearData {
   nurses: number;
   staff?: StaffData;
   newAdmissions: number;
+  plannedAdmissions?: number;
   surgeries: number;
   surgeriesGA: number;
   emergencyTransports: number;
@@ -536,6 +537,130 @@ export default function HospitalDetailPage() {
           </p>
         )}
       </div>
+
+      {/* 年間入院実績 (様式1 由来) */}
+      {(() => {
+        // 各年度の新規入棟・延べ入院日数・病床利用率を時系列で
+        const yearsSorted = Object.keys(detail.yearlyData).sort();
+        const rows = yearsSorted
+          .map((y) => {
+            const yd = detail.yearlyData[y];
+            return {
+              year: y,
+              newAdmissions: yd.newAdmissions || 0,
+              inpatientDays: yd.inpatientDays || 0,
+              bedUtilizationRate: yd.bedUtilizationRate ?? null,
+              totalBeds: yd.totalBeds || 0,
+            };
+          })
+          .filter((r) => r.newAdmissions > 0 || r.inpatientDays > 0);
+        if (rows.length === 0) return null;
+        const latest = rows[rows.length - 1];
+        const avgLOS =
+          latest.newAdmissions > 0
+            ? latest.inpatientDays / latest.newAdmissions
+            : 0;
+        return (
+          <div className="mb-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-semibold">年間入院実績</h3>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  病床機能報告 様式1 年間データ (4月〜翌3月) から集計
+                </p>
+              </div>
+              <span className="text-xs text-gray-400">最新: {latest.year}年度</span>
+            </div>
+
+            {/* 最新年度 KPI */}
+            <div className="mb-4 grid gap-3 sm:grid-cols-4">
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <p className="text-xs text-gray-500">新規入院患者数 (年間)</p>
+                <p className="mt-1 text-xl font-bold text-gray-900">
+                  {latest.newAdmissions.toLocaleString()}
+                  <span className="ml-1 text-sm font-normal text-gray-500">人</span>
+                </p>
+              </div>
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <p className="text-xs text-gray-500">延べ入院日数</p>
+                <p className="mt-1 text-xl font-bold text-gray-900">
+                  {latest.inpatientDays.toLocaleString()}
+                  <span className="ml-1 text-sm font-normal text-gray-500">人日</span>
+                </p>
+              </div>
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <p className="text-xs text-gray-500">病床利用率</p>
+                <p className="mt-1 text-xl font-bold text-gray-900">
+                  {latest.bedUtilizationRate != null
+                    ? latest.bedUtilizationRate.toFixed(1)
+                    : "-"}
+                  {latest.bedUtilizationRate != null && (
+                    <span className="ml-1 text-sm font-normal text-gray-500">%</span>
+                  )}
+                </p>
+                <p className="mt-0.5 text-[11px] text-gray-400">
+                  延べ入院日数 ÷ (最大稼働病床 × 365)
+                </p>
+              </div>
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <p className="text-xs text-gray-500">平均在院日数 (概算)</p>
+                <p className="mt-1 text-xl font-bold text-gray-900">
+                  {avgLOS > 0 ? avgLOS.toFixed(1) : "-"}
+                  {avgLOS > 0 && (
+                    <span className="ml-1 text-sm font-normal text-gray-500">日</span>
+                  )}
+                </p>
+                <p className="mt-0.5 text-[11px] text-gray-400">
+                  延べ入院日数 ÷ 新規入院患者数
+                </p>
+              </div>
+            </div>
+
+            {/* 年度別推移テーブル */}
+            {rows.length > 1 && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-left text-gray-500">
+                      <th className="py-2 pr-4">年度</th>
+                      <th className="py-2 pr-4 text-right">新規入院</th>
+                      <th className="py-2 pr-4 text-right">延べ入院日数</th>
+                      <th className="py-2 pr-4 text-right">病床利用率</th>
+                      <th className="py-2 pr-4 text-right">平均在院日数</th>
+                      <th className="py-2 text-right">総病床数</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => {
+                      const los =
+                        r.newAdmissions > 0 ? r.inpatientDays / r.newAdmissions : 0;
+                      return (
+                        <tr key={r.year} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-2 pr-4 font-medium">{r.year}年度</td>
+                          <td className="py-2 pr-4 text-right">{r.newAdmissions.toLocaleString()}</td>
+                          <td className="py-2 pr-4 text-right">{r.inpatientDays.toLocaleString()}</td>
+                          <td className="py-2 pr-4 text-right">
+                            {r.bedUtilizationRate != null
+                              ? `${r.bedUtilizationRate.toFixed(1)}%`
+                              : "-"}
+                          </td>
+                          <td className="py-2 pr-4 text-right">
+                            {los > 0 ? `${los.toFixed(1)}日` : "-"}
+                          </td>
+                          <td className="py-2 text-right text-gray-600">{r.totalBeds.toLocaleString()}床</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="mt-3 text-[11px] text-gray-400">
+              ※ 外来患者数は病床機能報告の対象外のため本ダッシュボードでは未対応 (別データソースを調査中)
+            </p>
+          </div>
+        );
+      })()}
 
       {/* 地域の将来人口（医療需要の前提） — 所属構想区域の集計 */}
       <div className="mb-6">
