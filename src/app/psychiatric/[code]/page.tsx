@@ -17,6 +17,8 @@ import {
   CartesianGrid,
 } from "recharts";
 import { fetchHospitalDetail, fetch630Summary, fetchHospitalIndex, PREFECTURE_NAMES } from "@/lib/data";
+import { FUNCTION_LABELS, FUNCTION_COLORS } from "@/types";
+import type { FunctionType } from "@/types";
 import HospitalMap from "@/components/map/hospital-map";
 import type { HospitalMapItem } from "@/components/map/hospital-map";
 import { FuturePopulationPanel } from "@/components/ui/future-population-panel";
@@ -100,6 +102,13 @@ export default function PsychiatricDetailPage() {
         newAdmissions?: number;
         inpatientDays?: number;
         bedUtilizationRate?: number | null;
+        wards?: {
+          wardName: string;
+          functionType: string;
+          futureFunctionType: string;
+          beds: number;
+          admissionFee: string;
+        }[];
       }
     >;
   } | null>(null);
@@ -372,6 +381,75 @@ export default function PsychiatricDetailPage() {
             )}
             <p className="mt-3 text-[11px] text-gray-400">
               ※ 外来患者数は病床機能報告の対象外のため本ダッシュボードでは未対応 (別データソースを調査中)
+            </p>
+          </div>
+        );
+      })()}
+
+      {/* 病棟別詳細（病床機能報告 様式1 由来） */}
+      {(() => {
+        const wards = latestYear ? detail.yearlyData[latestYear]?.wards : undefined;
+        if (!wards || wards.length === 0) return null;
+        return (
+          <div className="mb-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-semibold">病棟別詳細</h3>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  病床機能報告 様式1 より、病棟ごとの病床数・算定入院料
+                </p>
+              </div>
+              <span className="text-xs text-gray-400">{latestYear}年度</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left text-gray-500">
+                    <th className="py-2 pr-4">病棟名</th>
+                    <th className="py-2 pr-4">{latestYear}年度</th>
+                    <th className="py-2 pr-4">{Number(latestYear) + 6}年度予定</th>
+                    <th className="py-2 pr-4 text-right">病床数</th>
+                    <th className="py-2">算定入院料</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {wards.map((ward, i) => (
+                    <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-2 pr-4">{ward.wardName}</td>
+                      <td className="py-2 pr-4">
+                        <span
+                          className="inline-block rounded px-2 py-0.5 text-xs font-medium text-white"
+                          style={{
+                            backgroundColor:
+                              FUNCTION_COLORS[ward.functionType as FunctionType] || "#9ca3af",
+                          }}
+                        >
+                          {FUNCTION_LABELS[ward.functionType as FunctionType] || ward.functionType}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-4">
+                        <span
+                          className="inline-block rounded px-2 py-0.5 text-xs font-medium text-white"
+                          style={{
+                            backgroundColor:
+                              FUNCTION_COLORS[ward.futureFunctionType as FunctionType] || "#9ca3af",
+                          }}
+                        >
+                          {FUNCTION_LABELS[ward.futureFunctionType as FunctionType] ||
+                            ward.futureFunctionType}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-4 text-right">{ward.beds.toLocaleString()}</td>
+                      <td className="py-2 text-xs text-gray-500">
+                        {/^\d+$/.test(ward.admissionFee) ? "-" : ward.admissionFee}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-3 text-[11px] text-gray-400">
+              ※ 「精神病棟入院基本料」「認知症治療病棟入院料」「精神療養病棟入院料」等が算定入院料欄に表示されます。病床機能報告に参加していない精神科専門病院は本表示の対象外です。
             </p>
           </div>
         );
