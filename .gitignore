@@ -37,3 +37,7 @@ venv/
 
 # Vercel
 .vercel
+
+# build artifacts
+next-env.d.ts
+tsconfig.tsbuildinfo
