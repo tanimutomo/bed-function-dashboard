@@ -27,7 +27,9 @@ yarn-debug.log*
 yarn-error.log*
 
 # Raw data: 政府公開オープンデータ（出典は docs/DATA_SOURCES.md）。
-# 別マシンへの移送・再現性のためリポジトリに含める（約469MB）
+# 別マシンへの移送・再現性のためリポジトリに含める（約468MB）
+# ただしダウンロード時の zip は展開済み xlsx/csv と重複するので追跡しない
+data/raw/**/*.zip
 
 # Python
 __pycache__/
